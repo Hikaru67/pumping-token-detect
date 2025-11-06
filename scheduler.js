@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { fetchTickerData } from './apiClient.js';
 import { getTop10PumpTokens } from './dataProcessor.js';
 import { saveTop10, loadTop10 } from './storage.js';
-import { detectTop3Changes, getTop3ChangeInfo } from './comparator.js';
+import { detectTop1Change, getTop1ChangeInfo } from './comparator.js';
 import { sendTelegramAlert } from './telegramBot.js';
 import { config } from './config.js';
 
@@ -50,23 +50,23 @@ async function checkPumpTokens() {
 
     // 4. Kiểm tra và gửi alert
     // Nếu lần đầu chạy (chưa có dữ liệu), gửi alert luôn
-    // Nếu đã có dữ liệu, chỉ gửi khi top 3 thay đổi
+    // Nếu đã có dữ liệu, chỉ gửi khi top 1 thay đổi
     if (previousData === null) {
       console.log('📝 Lần đầu chạy - Gửi top 10 hiện tại');
       await sendTelegramAlert(top10);
     } else {
-      // Kiểm tra thay đổi top 3
-      const changeInfo = getTop3ChangeInfo(top10, previousData);
+      // Kiểm tra thay đổi top 1
+      const changeInfo = getTop1ChangeInfo(top10, previousData);
       
       if (changeInfo.changed) {
-        console.log('🚨 Phát hiện thay đổi ở top 3!');
-        console.log('   Top 3 trước:', changeInfo.previousTop3.map(t => t.symbol).join(', '));
-        console.log('   Top 3 hiện tại:', changeInfo.currentTop3.map(t => t.symbol).join(', '));
+        console.log('🚨 Phát hiện thay đổi ở top 1!');
+        console.log(`   Top 1 trước: ${changeInfo.previousTop1 ? changeInfo.previousTop1.symbol : 'N/A'}`);
+        console.log(`   Top 1 hiện tại: ${changeInfo.currentTop1 ? changeInfo.currentTop1.symbol : 'N/A'}`);
         
         // Gửi thông báo Telegram
         await sendTelegramAlert(top10);
       } else {
-        console.log('✅ Không có thay đổi ở top 3');
+        console.log('✅ Không có thay đổi ở top 1');
       }
     }
 
