@@ -1,5 +1,16 @@
 /**
+ * Bỏ đuôi _USDT hoặc _USDC trong symbol để so sánh
+ * @param {string} symbol - Symbol gốc
+ * @returns {string} Symbol đã bỏ đuôi
+ */
+function getBaseSymbol(symbol) {
+  if (!symbol) return '';
+  return symbol.replace(/_USDT$|_USDC$/, '');
+}
+
+/**
  * Lọc và sắp xếp token để lấy top 10 pump dựa trên riseFallRate
+ * Loại bỏ các symbol trùng lặp (chỉ khác đuôi _USDT/_USDC)
  * @param {Array} data - Dữ liệu từ API
  * @returns {Array} Top 10 token có riseFallRate cao nhất
  */
@@ -31,8 +42,30 @@ export function getTop10PumpTokens(data) {
     return [];
   }
 
+  // Group các token theo base symbol (bỏ đuôi _USDT/_USDC)
+  // Chỉ giữ lại token có riseFallRate cao nhất trong mỗi group
+  const symbolMap = new Map();
+  
+  validTokens.forEach(token => {
+    const baseSymbol = getBaseSymbol(token.symbol);
+    const existing = symbolMap.get(baseSymbol);
+    
+    // Nếu chưa có hoặc token hiện tại có riseFallRate cao hơn, thay thế
+    if (!existing || token.riseFallRate > existing.riseFallRate) {
+      symbolMap.set(baseSymbol, token);
+    }
+  });
+
+  // Chuyển Map thành array
+  const uniqueTokens = Array.from(symbolMap.values());
+
+  if (uniqueTokens.length === 0) {
+    console.warn('⚠️  Không có token nào sau khi lọc trùng lặp');
+    return [];
+  }
+
   // Sắp xếp theo riseFallRate giảm dần (tăng nhiều nhất)
-  const sortedTokens = validTokens.sort((a, b) => b.riseFallRate - a.riseFallRate);
+  const sortedTokens = uniqueTokens.sort((a, b) => b.riseFallRate - a.riseFallRate);
 
   // Lấy top 10 và thêm rank
   const top10 = sortedTokens.slice(0, 10).map((token, index) => {
