@@ -45,11 +45,28 @@ export async function saveTop10(top10) {
 export async function loadTop10() {
   try {
     const data = await fs.readFile(config.historyFile, 'utf-8');
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    
+    // Validate structure
+    if (!parsed || typeof parsed !== 'object') {
+      console.warn('⚠️  File lịch sử không hợp lệ, sẽ tạo mới');
+      return null;
+    }
+    
+    if (!Array.isArray(parsed.top10)) {
+      console.warn('⚠️  Dữ liệu top10 không hợp lệ, sẽ tạo mới');
+      return null;
+    }
+    
+    return parsed;
   } catch (error) {
     if (error.code === 'ENOENT') {
       // File chưa tồn tại, đây là lần chạy đầu tiên
       console.log('📝 Chưa có dữ liệu lịch sử, đây là lần chạy đầu tiên');
+      return null;
+    }
+    if (error instanceof SyntaxError) {
+      console.error('⚠️  File JSON bị corrupt, sẽ tạo mới:', error.message);
       return null;
     }
     console.error('Lỗi khi đọc file:', error.message);

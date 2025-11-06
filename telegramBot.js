@@ -1,8 +1,6 @@
 import axios from 'axios';
 import { config } from './config.js';
 
-const TELEGRAM_API_URL = `https://api.telegram.org/bot${config.telegramBotToken}`;
-
 /**
  * Bỏ đuôi _USDT hoặc _USDC trong symbol
  * @param {string} symbol - Symbol gốc
@@ -14,11 +12,26 @@ function cleanSymbol(symbol) {
 }
 
 /**
+ * Escape Markdown special characters
+ * @param {string} text - Text cần escape
+ * @returns {string} Text đã escape
+ */
+function escapeMarkdown(text) {
+  if (typeof text !== 'string') return '';
+  return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+}
+
+/**
  * Format thông báo alert cho Telegram
  * @param {Array} top10 - Top 10 token
  * @returns {string} Message đã format
  */
 function formatAlertMessage(top10) {
+  // Validate input
+  if (!Array.isArray(top10) || top10.length === 0) {
+    return '⚠️ Không có dữ liệu để hiển thị';
+  }
+
   const timestamp = new Date().toLocaleString('vi-VN', { 
     timeZone: 'Asia/Ho_Chi_Minh',
     year: 'numeric',
@@ -37,19 +50,19 @@ function formatAlertMessage(top10) {
     const medal = medals[index] || `${index + 1}.`;
     const riseFallPercent = (token.riseFallRate * 100).toFixed(2);
     const sign = token.riseFallRate >= 0 ? '+' : '';
-    const cleanSymbolName = cleanSymbol(token.symbol);
+    const cleanSymbolName = escapeMarkdown(cleanSymbol(token.symbol));
     
     message += `${medal} *#${token.rank} $${cleanSymbolName}*\n`;
     message += `   Biến động: *${sign}${riseFallPercent}%*\n`;
     
     // Thêm funding rate
-    if (token.fundingRate !== undefined && token.fundingRate !== null) {
+    if (token.fundingRate !== undefined && token.fundingRate !== null && !isNaN(token.fundingRate)) {
       const fundingPercent = (token.fundingRate * 100).toFixed(4);
       const fundingSign = token.fundingRate >= 0 ? '+' : '';
       message += `   Funding Rate: ${fundingSign}${fundingPercent}%\n`;
     }
     
-    if (token.riseFallValue !== undefined && token.riseFallValue !== null) {
+    if (token.riseFallValue !== undefined && token.riseFallValue !== null && !isNaN(token.riseFallValue)) {
       message += `   Thay đổi giá trị: ${sign}${token.riseFallValue}\n`;
     }
     
@@ -66,6 +79,12 @@ function formatAlertMessage(top10) {
 
   message += `⏰ Thời gian: ${timestamp}`;
 
+  // Kiểm tra độ dài message (Telegram limit: 4096 characters)
+  if (message.length > 4096) {
+    console.warn('⚠️  Message quá dài, sẽ bị cắt bớt');
+    message = message.substring(0, 4090) + '...';
+  }
+
   return message;
 }
 
@@ -75,16 +94,23 @@ function formatAlertMessage(top10) {
  * @returns {string} Số đã format
  */
 function formatNumber(num) {
-  if (num >= 1000000000) {
-    return (num / 1000000000).toFixed(2) + 'B';
+  if (typeof num !== 'number' || isNaN(num)) {
+    return '0';
   }
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(2) + 'M';
+  
+  const absNum = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+  
+  if (absNum >= 1000000000) {
+    return sign + (absNum / 1000000000).toFixed(2) + 'B';
   }
-  if (num >= 1000) {
-    return (num / 1000).toFixed(2) + 'K';
+  if (absNum >= 1000000) {
+    return sign + (absNum / 1000000).toFixed(2) + 'M';
   }
-  return num.toString();
+  if (absNum >= 1000) {
+    return sign + (absNum / 1000).toFixed(2) + 'K';
+  }
+  return sign + absNum.toString();
 }
 
 /**
@@ -98,8 +124,15 @@ export async function sendTelegramAlert(top10) {
     return false;
   }
 
+  // Validate input
+  if (!Array.isArray(top10) || top10.length === 0) {
+    console.warn('⚠️  Không có dữ liệu để gửi');
+    return false;
+  }
+
   try {
     const message = formatAlertMessage(top10);
+    const TELEGRAM_API_URL = `https://api.telegram.org/bot${config.telegramBotToken}`;
     
     const response = await axios.post(
       `${TELEGRAM_API_URL}/sendMessage`,

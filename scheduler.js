@@ -32,6 +32,12 @@ async function checkPumpTokens() {
     // 2. Xử lý và tính toán top 10
     console.log('🔢 Đang tính toán riseFallRate và lọc top 10...');
     const top10 = getTop10PumpTokens(apiData);
+    
+    if (top10.length === 0) {
+      console.warn('⚠️  Không có token nào để hiển thị');
+      return;
+    }
+    
     console.log('✅ Đã tính toán top 10 (theo RiseFallRate):');
     top10.forEach(token => {
       const percent = (token.riseFallRate * 100).toFixed(2);
@@ -42,18 +48,26 @@ async function checkPumpTokens() {
     // 3. Load dữ liệu trước đó
     const previousData = await loadTop10();
 
-    // 4. Kiểm tra thay đổi top 3
-    const changeInfo = getTop3ChangeInfo(top10, previousData);
-    
-    if (changeInfo.changed) {
-      console.log('🚨 Phát hiện thay đổi ở top 3!');
-      console.log('   Top 3 trước:', changeInfo.previousTop3.map(t => t.symbol).join(', '));
-      console.log('   Top 3 hiện tại:', changeInfo.currentTop3.map(t => t.symbol).join(', '));
-      
-      // 5. Gửi thông báo Telegram
+    // 4. Kiểm tra và gửi alert
+    // Nếu lần đầu chạy (chưa có dữ liệu), gửi alert luôn
+    // Nếu đã có dữ liệu, chỉ gửi khi top 3 thay đổi
+    if (previousData === null) {
+      console.log('📝 Lần đầu chạy - Gửi top 10 hiện tại');
       await sendTelegramAlert(top10);
     } else {
-      console.log('✅ Không có thay đổi ở top 3');
+      // Kiểm tra thay đổi top 3
+      const changeInfo = getTop3ChangeInfo(top10, previousData);
+      
+      if (changeInfo.changed) {
+        console.log('🚨 Phát hiện thay đổi ở top 3!');
+        console.log('   Top 3 trước:', changeInfo.previousTop3.map(t => t.symbol).join(', '));
+        console.log('   Top 3 hiện tại:', changeInfo.currentTop3.map(t => t.symbol).join(', '));
+        
+        // Gửi thông báo Telegram
+        await sendTelegramAlert(top10);
+      } else {
+        console.log('✅ Không có thay đổi ở top 3');
+      }
     }
 
     // 6. Lưu top 10 mới

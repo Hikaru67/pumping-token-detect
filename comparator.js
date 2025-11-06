@@ -46,7 +46,7 @@ export function detectTop3Changes(currentTop10, previousData) {
 export function getTop3ChangeInfo(currentTop10, previousData) {
   if (!previousData || !previousData.top10) {
     return {
-      changed: true,
+      changed: false, // Không gửi alert lần đầu tiên
       currentTop3: currentTop10.slice(0, 3),
       previousTop3: [],
     };

@@ -4,11 +4,14 @@ Hệ thống tự động theo dõi và cảnh báo top 10 token có tỷ lệ p
 
 ## ✨ Tính năng
 
-- 📊 Theo dõi top 10 token có pump ratio cao nhất (high24Price/low24Price)
+- 📊 Theo dõi top 10 token có **riseFallRate** cao nhất (tỷ lệ biến động giá trong 24h)
 - ⏰ Tự động check mỗi 1 phút
 - 💾 Lưu trữ lịch sử top 10 vào JSON file
-- 🔔 Gửi thông báo Telegram khi top 3 thay đổi
-- 🛡️ Xử lý lỗi và retry logic
+- 🔔 Gửi thông báo Telegram với **top 10** khi top 3 thay đổi
+- 📈 Hiển thị **funding rate** và thông tin chi tiết
+- 🎯 Symbol được làm sạch (bỏ đuôi _USDT/_USDC)
+- 🚀 Gửi alert ngay lần đầu chạy (không cần đợi thay đổi)
+- 🛡️ Xử lý lỗi và validation đầy đủ
 
 ## 📋 Yêu cầu
 
@@ -85,7 +88,7 @@ pump-token-alert/
 ├── main.js              # Entry point
 ├── scheduler.js         # Cron job scheduler
 ├── apiClient.js         # MEXC API client
-├── dataProcessor.js     # Xử lý và tính toán pump ratio
+├── dataProcessor.js     # Xử lý và tính toán riseFallRate
 ├── storage.js           # Lưu trữ top 10 vào JSON
 ├── comparator.js        # So sánh và phát hiện thay đổi
 ├── telegramBot.js       # Gửi thông báo Telegram
@@ -100,44 +103,63 @@ pump-token-alert/
 
 ## 🔍 Logic hoạt động
 
-1. **Tính toán Pump Ratio:**
-   ```
-   pumpRatio = high24Price / lower24Price
-   ```
+1. **Sắp xếp theo RiseFallRate:**
+   - Sử dụng `riseFallRate` từ API (tỷ lệ biến động giá trong 24h)
+   - Sort giảm dần để lấy token tăng nhiều nhất
 
 2. **Lọc token hợp lệ:**
-   - Loại bỏ token có `lower24Price = 0` hoặc `high24Price = 0`
-   - Loại bỏ token có `volume24 = 0`
+   - Token phải có `volume24 > 0`
+   - Token phải có `riseFallRate` hợp lệ (không null/undefined/NaN)
+   - Token phải có `symbol`
 
-3. **Sắp xếp và lấy top 10:**
-   - Sort giảm dần theo `pumpRatio`
+3. **Lấy top 10:**
+   - Sort giảm dần theo `riseFallRate`
    - Lấy 10 token đầu tiên
 
 4. **Phát hiện thay đổi:**
-   - So sánh top 3 hiện tại với top 3 trước đó
+   - **Lần đầu chạy:** Gửi alert ngay với top 10 hiện tại
+   - **Các lần sau:** So sánh top 3 hiện tại với top 3 trước đó
    - Phát hiện thay đổi về symbol hoặc thứ tự ranking
 
 5. **Gửi thông báo:**
-   - Gửi Telegram alert khi có thay đổi ở top 3
+   - Gửi Telegram alert với **top 10** khi có thay đổi ở top 3
+   - Message bao gồm: RiseFallRate, Funding Rate, giá 24h, giá hiện tại, volume
 
 ## 📊 Format thông báo Telegram
 
 ```
-🚀 TOP PUMP ALERT - Thay đổi Top 3
+*TOP 10 PUMP TOKENS*
 
-📊 Top 3 hiện tại:
+📊 Top 10 Pump Tokens (theo RiseFallRate):
 
-🥇 #1 GIGGLE_USDT
-   Pump: 2.26x (+126.00%)
-   Giá: 121.25 → 274.25
-   Giá hiện tại: 228.72
-   Volume 24h: 10.93M
+🥇 #1 $SOONNETWORK
+   Biến động: +81.93%
+   Funding Rate: -1.0194%
+   Thay đổi giá trị: +0.6655
+   Giá 24h: 0.7075 → 3.0308
+   Giá hiện tại: 1.4777
+   Volume 24h: 37.54M
 
-🥈 #2 TOKEN_B
+🥈 #2 $GIGGLE
+   Biến động: +30.07%
+   Funding Rate: -0.0003%
    ...
+
+🥉 #3 $ZEC
+   ...
+
+4️⃣ #4 $ASTER
+   ...
+
+... (đến top 10)
 
 ⏰ Thời gian: 15/01/2025 14:30:25
 ```
+
+**Lưu ý:**
+- Symbol được làm sạch (bỏ đuôi _USDT/_USDC)
+- Hiển thị đầy đủ top 10 tokens
+- Bao gồm Funding Rate cho mỗi token
 
 ## ⚙️ Cấu hình nâng cao
 
@@ -187,16 +209,26 @@ Hệ thống sẽ hiển thị logs trong console:
 - ⚠️ **KHÔNG** chia sẻ Telegram Bot Token
 - ✅ File `.gitignore` đã được cấu hình để bỏ qua các file nhạy cảm
 
+## 🧪 Test
+
+Test gửi message Telegram:
+
+```bash
+npm run test:telegram
+```
+
 ## 🚀 Mở rộng
 
 Các tính năng có thể mở rộng:
 
 - [ ] Filter theo volume threshold
 - [ ] Filter theo market cap
-- [ ] Alert khi pump ratio vượt ngưỡng
+- [ ] Alert khi riseFallRate vượt ngưỡng
 - [ ] Dashboard web để xem real-time
 - [ ] Lưu lịch sử vào database
 - [ ] Phân tích xu hướng và biểu đồ
+- [ ] Retry logic cho API calls
+- [ ] Rate limiting cho Telegram API
 
 ## 📄 License
 

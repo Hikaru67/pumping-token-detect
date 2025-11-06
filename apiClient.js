@@ -22,6 +22,11 @@ export async function fetchTickerData() {
       throw new Error('Dữ liệu từ API không phải là array');
     }
 
+    if (response.data.data.length === 0) {
+      console.warn('⚠️  API trả về mảng rỗng');
+      return [];
+    }
+
     return response.data.data;
   } catch (error) {
     if (error.response) {
