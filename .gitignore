@@ -6,7 +6,8 @@ node_modules/
 
 # Data files
 data/
-*.json
+# Ignore JSON files in data directory, but keep package.json
+data/*.json
 
 # Logs
 *.log

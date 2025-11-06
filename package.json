@@ -1,0 +1,27 @@
+{
+  "name": "pump-token-alert",
+  "version": "1.0.0",
+  "description": "Hệ thống alert top 10 pump token trong 24h từ MEXC Futures API",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node main.js",
+    "dev": "node --watch main.js",
+    "test:telegram": "node test-telegram.js"
+  },
+  "keywords": [
+    "crypto",
+    "pump",
+    "alert",
+    "telegram",
+    "mexc"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "node-cron": "^3.0.3",
+    "dotenv": "^16.3.1"
+  }
+}
+
