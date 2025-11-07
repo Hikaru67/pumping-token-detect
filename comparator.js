@@ -1,5 +1,16 @@
 /**
+ * Bỏ đuôi _USDT hoặc _USDC trong symbol để so sánh
+ * @param {string} symbol - Symbol gốc
+ * @returns {string} Symbol đã bỏ đuôi
+ */
+function getBaseSymbol(symbol) {
+  if (!symbol) return '';
+  return symbol.replace(/_USDT$|_USDC$/, '');
+}
+
+/**
  * Phát hiện thay đổi trong top 1
+ * So sánh base symbol (bỏ đuôi _USDT/_USDC) để tránh alert khi cùng mã nhưng khác đuôi
  * @param {Array} currentTop10 - Top 10 hiện tại
  * @param {Object} previousData - Dữ liệu top 10 trước đó (có thể null)
  * @returns {boolean} true nếu có thay đổi ở top 1
@@ -18,8 +29,12 @@ export function detectTop1Change(currentTop10, previousData) {
   // Lấy top 1 symbol trước đó
   const previousTop1Symbol = previousTop10.length > 0 ? previousTop10[0].symbol : null;
 
-  // Kiểm tra nếu top 1 symbol thay đổi
-  return currentTop1Symbol !== previousTop1Symbol;
+  // So sánh base symbol (bỏ đuôi _USDT/_USDC) để tránh alert khi cùng mã nhưng khác đuôi
+  const currentBaseSymbol = getBaseSymbol(currentTop1Symbol);
+  const previousBaseSymbol = getBaseSymbol(previousTop1Symbol);
+
+  // Kiểm tra nếu top 1 base symbol thay đổi
+  return currentBaseSymbol !== previousBaseSymbol;
 }
 
 /**
