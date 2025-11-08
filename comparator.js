@@ -3,7 +3,7 @@
  * @param {string} symbol - Symbol gốc
  * @returns {string} Symbol đã bỏ đuôi
  */
-function getBaseSymbol(symbol) {
+export function getBaseSymbol(symbol) {
   if (!symbol) return '';
   return symbol.replace(/_USDT$|_USDC$/, '');
 }
@@ -11,9 +11,10 @@ function getBaseSymbol(symbol) {
 /**
  * Phát hiện thay đổi trong top 1
  * So sánh base symbol (bỏ đuôi _USDT/_USDC) để tránh alert khi cùng mã nhưng khác đuôi
+ * Kiểm tra whitelist: nếu top 1 mới nằm trong whitelist thì không alert
  * @param {Array} currentTop10 - Top 10 hiện tại
  * @param {Object} previousData - Dữ liệu top 10 trước đó (có thể null)
- * @returns {boolean} true nếu có thay đổi ở top 1
+ * @returns {boolean} true nếu có thay đổi ở top 1 và không nằm trong whitelist
  */
 export function detectTop1Change(currentTop10, previousData) {
   // Lần chạy đầu tiên, không có dữ liệu để so sánh
@@ -33,8 +34,19 @@ export function detectTop1Change(currentTop10, previousData) {
   const currentBaseSymbol = getBaseSymbol(currentTop1Symbol);
   const previousBaseSymbol = getBaseSymbol(previousTop1Symbol);
 
-  // Kiểm tra nếu top 1 base symbol thay đổi
-  return currentBaseSymbol !== previousBaseSymbol;
+  // Kiểm tra nếu top 1 base symbol không thay đổi
+  if (currentBaseSymbol === previousBaseSymbol) {
+    return false;
+  }
+
+  // Kiểm tra whitelist: nếu top 1 mới nằm trong whitelist thì không alert
+  const whitelist = previousData.top1Whitelist || [];
+  if (whitelist.includes(currentBaseSymbol)) {
+    return false; // Nằm trong whitelist, không alert
+  }
+
+  // Top 1 thay đổi và không nằm trong whitelist
+  return true;
 }
 
 /**
@@ -49,16 +61,44 @@ export function getTop1ChangeInfo(currentTop10, previousData) {
       changed: false, // Không gửi alert lần đầu tiên
       currentTop1: currentTop10.length > 0 ? currentTop10[0] : null,
       previousTop1: null,
+      inWhitelist: false,
     };
   }
 
   const currentTop1 = currentTop10.length > 0 ? currentTop10[0] : null;
   const previousTop1 = previousData.top10.length > 0 ? previousData.top10[0] : null;
+  const currentBaseSymbol = getBaseSymbol(currentTop1 ? currentTop1.symbol : null);
+  const whitelist = previousData.top1Whitelist || [];
+  const inWhitelist = whitelist.includes(currentBaseSymbol);
 
   return {
     changed: detectTop1Change(currentTop10, previousData),
     currentTop1,
     previousTop1,
+    inWhitelist,
   };
+}
+
+/**
+ * Cập nhật whitelist top 1 (chỉ giữ 2 gần nhất)
+ * @param {Object} previousData - Dữ liệu trước đó
+ * @param {string} newTop1BaseSymbol - Base symbol của top 1 mới
+ * @returns {Array} Whitelist mới
+ */
+export function updateTop1Whitelist(previousData, newTop1BaseSymbol) {
+  if (!newTop1BaseSymbol) {
+    return previousData?.top1Whitelist || [];
+  }
+
+  const currentWhitelist = previousData?.top1Whitelist || [];
+  
+  // Loại bỏ symbol mới nếu đã có trong whitelist (để thêm vào đầu)
+  const filteredWhitelist = currentWhitelist.filter(symbol => symbol !== newTop1BaseSymbol);
+  
+  // Thêm symbol mới vào đầu
+  const newWhitelist = [newTop1BaseSymbol, ...filteredWhitelist];
+  
+  // Chỉ giữ 2 gần nhất
+  return newWhitelist.slice(0, 2);
 }
 

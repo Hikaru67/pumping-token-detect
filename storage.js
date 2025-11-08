@@ -16,13 +16,15 @@ async function ensureDataDir() {
 /**
  * Lưu top 10 vào file JSON
  * @param {Array} top10 - Top 10 token
+ * @param {Array} top1Whitelist - Whitelist top 1 (chỉ 2 gần nhất)
  */
-export async function saveTop10(top10) {
+export async function saveTop10(top10, top1Whitelist = null) {
   await ensureDataDir();
 
   const data = {
     timestamp: new Date().toISOString(),
     top10: top10,
+    top1Whitelist: top1Whitelist || [],
   };
 
   try {

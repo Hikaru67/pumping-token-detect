@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { fetchTickerData } from './apiClient.js';
 import { getTop10PumpTokens } from './dataProcessor.js';
 import { saveTop10, loadTop10 } from './storage.js';
-import { detectTop1Change, getTop1ChangeInfo } from './comparator.js';
+import { detectTop1Change, getTop1ChangeInfo, updateTop1Whitelist, getBaseSymbol } from './comparator.js';
 import { sendTelegramAlert } from './telegramBot.js';
 import { config } from './config.js';
 
@@ -50,28 +50,51 @@ async function checkPumpTokens() {
 
     // 4. Kiểm tra và gửi alert
     // Nếu lần đầu chạy (chưa có dữ liệu), gửi alert luôn
-    // Nếu đã có dữ liệu, chỉ gửi khi top 1 thay đổi
+    // Nếu đã có dữ liệu, chỉ gửi khi top 1 thay đổi và không nằm trong whitelist
+    let newWhitelist = [];
+    
     if (previousData === null) {
       console.log('📝 Lần đầu chạy - Gửi top 10 hiện tại');
       await sendTelegramAlert(top10);
+      
+      // Lần đầu: thêm top 1 vào whitelist
+      const currentTop1 = top10.length > 0 ? top10[0] : null;
+      if (currentTop1) {
+        const baseSymbol = getBaseSymbol(currentTop1.symbol);
+        newWhitelist = [baseSymbol];
+      }
     } else {
       // Kiểm tra thay đổi top 1
       const changeInfo = getTop1ChangeInfo(top10, previousData);
+      const currentTop1 = top10.length > 0 ? top10[0] : null;
+      const currentBaseSymbol = currentTop1 ? getBaseSymbol(currentTop1.symbol) : null;
       
       if (changeInfo.changed) {
-        console.log('🚨 Phát hiện thay đổi ở top 1!');
-        console.log(`   Top 1 trước: ${changeInfo.previousTop1 ? changeInfo.previousTop1.symbol : 'N/A'}`);
-        console.log(`   Top 1 hiện tại: ${changeInfo.currentTop1 ? changeInfo.currentTop1.symbol : 'N/A'}`);
+        if (changeInfo.inWhitelist) {
+          console.log('✅ Top 1 thay đổi nhưng nằm trong whitelist, bỏ qua alert');
+          console.log(`   Top 1 trước: ${changeInfo.previousTop1 ? changeInfo.previousTop1.symbol : 'N/A'}`);
+          console.log(`   Top 1 hiện tại: ${changeInfo.currentTop1 ? changeInfo.currentTop1.symbol : 'N/A'} (trong whitelist)`);
+        } else {
+          console.log('🚨 Phát hiện thay đổi ở top 1!');
+          console.log(`   Top 1 trước: ${changeInfo.previousTop1 ? changeInfo.previousTop1.symbol : 'N/A'}`);
+          console.log(`   Top 1 hiện tại: ${changeInfo.currentTop1 ? changeInfo.currentTop1.symbol : 'N/A'}`);
+          
+          // Gửi thông báo Telegram
+          await sendTelegramAlert(top10);
+        }
         
-        // Gửi thông báo Telegram
-        await sendTelegramAlert(top10);
+        // Cập nhật whitelist: thêm top 1 mới vào whitelist (chỉ giữ 2 gần nhất)
+        newWhitelist = updateTop1Whitelist(previousData, currentBaseSymbol);
+        console.log(`   Whitelist mới: ${newWhitelist.join(', ')}`);
       } else {
         console.log('✅ Không có thay đổi ở top 1');
+        // Không thay đổi, giữ nguyên whitelist
+        newWhitelist = previousData.top1Whitelist || [];
       }
     }
 
-    // 6. Lưu top 10 mới
-    await saveTop10(top10);
+    // 6. Lưu top 10 mới và whitelist
+    await saveTop10(top10, newWhitelist);
 
     const duration = Date.now() - startTime;
     console.log(`✅ Hoàn thành check trong ${duration}ms\n`);
