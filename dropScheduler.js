@@ -187,6 +187,7 @@ export function startDropScheduler() {
     console.warn('⚠️  [DROP] Telegram Drop channel chưa được cấu hình, sẽ không gửi thông báo');
   } else {
     console.log('✅ [DROP] Telegram Drop channel đã được cấu hình');
+    console.log(`   - Silent mode: ${config.telegramDropDisableNotification ? '🔇 Bật (không có âm thanh/thông báo)' : '🔔 Tắt (có âm thanh/thông báo)'}`);
   }
 
   // Chạy ngay lần đầu

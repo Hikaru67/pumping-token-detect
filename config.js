@@ -9,9 +9,11 @@ export const config = {
   // Telegram Bot - Pump Tokens
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
   telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
+  telegramDisableNotification: process.env.TELEGRAM_DISABLE_NOTIFICATION === 'true', // Silent mode (không có âm thanh/thông báo)
   
   // Telegram Bot - Drop Tokens
   telegramDropChatId: process.env.TELEGRAM_DROP_CHAT_ID || '',
+  telegramDropDisableNotification: process.env.TELEGRAM_DROP_DISABLE_NOTIFICATION === 'true', // Silent mode cho drop alerts
   
   // Scheduler
   cronSchedule: process.env.CRON_SCHEDULE || '*/1 * * * *', // Mỗi 1 phút

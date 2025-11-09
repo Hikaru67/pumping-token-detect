@@ -359,6 +359,7 @@ export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo 
         text: message,
         parse_mode: 'Markdown',
         disable_web_page_preview: true,
+        disable_notification: config.telegramDisableNotification, // Silent mode (không có âm thanh/thông báo)
       },
       {
         timeout: 10000,
@@ -415,6 +416,7 @@ export async function sendTelegramDropAlert(top10, alertReason = '', confluenceI
         text: message,
         parse_mode: 'Markdown',
         disable_web_page_preview: true,
+        disable_notification: config.telegramDropDisableNotification, // Silent mode cho drop alerts (không có âm thanh/thông báo)
       },
       {
         timeout: 10000,

@@ -48,6 +48,16 @@ TELEGRAM_BOT_TOKEN=your_bot_token_here
 
 # Telegram Chat ID (lấy từ @userinfobot)
 TELEGRAM_CHAT_ID=your_chat_id_here
+
+# Telegram Drop Chat ID (cho drop tokens, optional)
+TELEGRAM_DROP_CHAT_ID=your_drop_chat_id_here
+
+# Silent mode - Gửi thông báo im lặng (không có âm thanh/thông báo)
+# Giá trị: true hoặc false (mặc định: false)
+TELEGRAM_DISABLE_NOTIFICATION=false
+
+# Silent mode cho drop alerts (optional, mặc định: false)
+TELEGRAM_DROP_DISABLE_NOTIFICATION=false
 ```
 
 ### 🔧 Cách lấy Telegram Bot Token và Chat ID
@@ -184,6 +194,23 @@ CRON_SCHEDULE=0 * * * *
 DATA_DIR=./custom_data
 HISTORY_FILE=./custom_data/top10_history.json
 ```
+
+### Bật/tắt Silent Mode (Gửi thông báo im lặng)
+
+Silent mode cho phép gửi thông báo Telegram mà không có âm thanh/thông báo (useful khi có quá nhiều alerts):
+
+```env
+# Bật silent mode cho pump alerts
+TELEGRAM_DISABLE_NOTIFICATION=true
+
+# Bật silent mode cho drop alerts
+TELEGRAM_DROP_DISABLE_NOTIFICATION=true
+```
+
+**Lưu ý:**
+- `TELEGRAM_DISABLE_NOTIFICATION=true` → Thông báo im lặng (không có âm thanh/thông báo)
+- `TELEGRAM_DISABLE_NOTIFICATION=false` hoặc không set → Thông báo bình thường (có âm thanh/thông báo)
+- Có thể cấu hình riêng cho pump alerts và drop alerts
 
 ## 🐛 Xử lý lỗi
 

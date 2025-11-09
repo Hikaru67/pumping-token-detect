@@ -187,6 +187,7 @@ export function startScheduler() {
     console.warn('⚠️  Telegram chưa được cấu hình, sẽ không gửi thông báo');
   } else {
     console.log('✅ Telegram đã được cấu hình');
+    console.log(`   - Silent mode: ${config.telegramDisableNotification ? '🔇 Bật (không có âm thanh/thông báo)' : '🔔 Tắt (có âm thanh/thông báo)'}`);
   }
 
   // Chạy ngay lần đầu
