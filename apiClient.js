@@ -75,6 +75,7 @@ function getIntervalSeconds(interval) {
     'Min30': 1800,
     'Hour1': 3600,
     'Hour4': 14400,
+    'Hour8': 28800,
     'Day1': 86400,
     'Week1': 604800,
     'Month1': 2592000,

@@ -115,10 +115,6 @@ function formatAlertMessage(top10) {
       message += `   📊 RSI: ⚠️ Chưa tính toán\n`;
     }
     
-    if (token.riseFallValue !== undefined && token.riseFallValue !== null && !isNaN(token.riseFallValue)) {
-      message += `   Thay đổi giá trị: ${sign}${token.riseFallValue}\n`;
-    }
-    
     if (token.high24Price > 0 && token.lower24Price > 0) {
       message += `   Giá 24h: ${token.lower24Price} → ${token.high24Price}\n`;
     }
