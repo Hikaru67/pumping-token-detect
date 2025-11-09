@@ -80,7 +80,7 @@ export function getTop1ChangeInfo(currentTop10, previousData) {
 }
 
 /**
- * Cập nhật whitelist top 1 (chỉ giữ 2 gần nhất)
+ * Cập nhật whitelist top 1 (chỉ giữ 3 gần nhất)
  * @param {Object} previousData - Dữ liệu trước đó
  * @param {string} newTop1BaseSymbol - Base symbol của top 1 mới
  * @returns {Array} Whitelist mới
@@ -98,8 +98,8 @@ export function updateTop1Whitelist(previousData, newTop1BaseSymbol) {
   // Thêm symbol mới vào đầu
   const newWhitelist = [newTop1BaseSymbol, ...filteredWhitelist];
   
-  // Chỉ giữ 2 gần nhất
-  return newWhitelist.slice(0, 2);
+  // Chỉ giữ 3 gần nhất
+  return newWhitelist.slice(0, 3);
 }
 
 /**

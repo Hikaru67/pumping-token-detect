@@ -101,7 +101,7 @@ async function checkPumpTokens() {
           alertReason = 'Top 1 thay đổi';
         }
         
-        // Cập nhật whitelist: thêm top 1 mới vào whitelist (chỉ giữ 2 gần nhất)
+        // Cập nhật whitelist: thêm top 1 mới vào whitelist (chỉ giữ 3 gần nhất)
         newWhitelist = updateTop1Whitelist(previousData, currentBaseSymbol);
         console.log(`   Whitelist mới: ${newWhitelist.join(', ')}`);
       } else {

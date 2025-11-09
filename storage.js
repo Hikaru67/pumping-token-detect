@@ -16,7 +16,7 @@ async function ensureDataDir() {
 /**
  * Lưu top 10 vào file JSON
  * @param {Array} top10 - Top 10 token
- * @param {Array} top1Whitelist - Whitelist top 1 (chỉ 2 gần nhất)
+ * @param {Array} top1Whitelist - Whitelist top 1 (chỉ 3 gần nhất)
  */
 export async function saveTop10(top10, top1Whitelist = null) {
   await ensureDataDir();
@@ -79,7 +79,7 @@ export async function loadTop10() {
 /**
  * Lưu top 10 drop tokens vào file JSON
  * @param {Array} top10 - Top 10 drop tokens
- * @param {Array} top1Whitelist - Whitelist top 1 (chỉ 2 gần nhất)
+ * @param {Array} top1Whitelist - Whitelist top 1 (chỉ 3 gần nhất)
  */
 export async function saveTop10Drop(top10, top1Whitelist = null) {
   await ensureDataDir();
