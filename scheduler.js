@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { fetchTickerData } from './apiClient.js';
-import { getTop10PumpTokens } from './dataProcessor.js';
+import { getTop10PumpTokens, addRSIToTop10 } from './dataProcessor.js';
 import { saveTop10, loadTop10 } from './storage.js';
 import { detectTop1Change, getTop1ChangeInfo, updateTop1Whitelist, getBaseSymbol } from './comparator.js';
 import { sendTelegramAlert } from './telegramBot.js';
@@ -31,24 +31,36 @@ async function checkPumpTokens() {
 
     // 2. Xử lý và tính toán top 10
     console.log('🔢 Đang tính toán riseFallRate và lọc top 10...');
-    const top10 = getTop10PumpTokens(apiData);
+    const top10WithoutRSI = getTop10PumpTokens(apiData);
     
-    if (top10.length === 0) {
+    if (top10WithoutRSI.length === 0) {
       console.warn('⚠️  Không có token nào để hiển thị');
       return;
     }
     
     console.log('✅ Đã tính toán top 10 (theo RiseFallRate):');
-    top10.forEach(token => {
+    top10WithoutRSI.forEach(token => {
       const percent = (token.riseFallRate * 100).toFixed(2);
       const sign = token.riseFallRate >= 0 ? '+' : '';
       console.log(`   ${token.rank}. ${token.symbol} - ${sign}${percent}%`);
     });
 
-    // 3. Load dữ liệu trước đó
+    // 3. Tính RSI cho top 10 tokens
+    console.log('\n📊 Đang tính RSI cho top 10 tokens...');
+    const top10 = await addRSIToTop10(top10WithoutRSI);
+    
+    // Log RSI confluence nếu có
+    top10.forEach(token => {
+      if (token.rsiConfluence && token.rsiConfluence.hasConfluence) {
+        const confluenceStatus = token.rsiConfluence.status === 'oversold' ? '🟢 Oversold' : '🔴 Overbought';
+        console.log(`   ${token.symbol}: ${confluenceStatus} Confluence (${token.rsiConfluence.count} timeframes)`);
+      }
+    });
+
+    // 4. Load dữ liệu trước đó
     const previousData = await loadTop10();
 
-    // 4. Kiểm tra và gửi alert
+    // 5. Kiểm tra và gửi alert
     // Nếu lần đầu chạy (chưa có dữ liệu), gửi alert luôn
     // Nếu đã có dữ liệu, chỉ gửi khi top 1 thay đổi và không nằm trong whitelist
     let newWhitelist = [];
@@ -93,7 +105,7 @@ async function checkPumpTokens() {
       }
     }
 
-    // 6. Lưu top 10 mới và whitelist
+    // 6. Lưu top 10 mới (có RSI) và whitelist
     await saveTop10(top10, newWhitelist);
 
     const duration = Date.now() - startTime;
@@ -115,6 +127,12 @@ export function startScheduler() {
   console.log(`⏰ Lịch chạy: ${config.cronSchedule} (mỗi 1 phút)`);
   console.log(`📁 Thư mục data: ${config.dataDir}`);
   console.log(`📄 File lịch sử: ${config.historyFile}`);
+  console.log(`📊 RSI Configuration:`);
+  console.log(`   - Timeframes: ${config.rsiTimeframes.join(', ')}`);
+  console.log(`   - Period: ${config.rsiPeriod}`);
+  console.log(`   - Oversold: < ${config.rsiOversoldThreshold}`);
+  console.log(`   - Overbought: > ${config.rsiOverboughtThreshold}`);
+  console.log(`   - Confluence min timeframes: ${config.rsiConfluenceMinTimeframes}`);
   
   if (!config.telegramBotToken || !config.telegramChatId) {
     console.warn('⚠️  Telegram chưa được cấu hình, sẽ không gửi thông báo');

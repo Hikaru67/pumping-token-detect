@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from './config.js';
+import { formatTimeframe, getRSIStatus } from './rsiCalculator.js';
 
 /**
  * Bỏ đuôi _USDT hoặc _USDC trong symbol
@@ -60,6 +61,58 @@ function formatAlertMessage(top10) {
       const fundingPercent = (token.fundingRate * 100).toFixed(4);
       const fundingSign = token.fundingRate >= 0 ? '+' : '';
       message += `   Funding Rate: ${fundingSign}${fundingPercent}%\n`;
+    }
+    
+    // Hiển thị RSI - luôn hiển thị nếu có dữ liệu
+    if (token.rsi && typeof token.rsi === 'object') {
+      const rsiEntries = Object.entries(token.rsi).filter(([_, rsi]) => rsi !== null && !isNaN(rsi));
+      
+      if (rsiEntries.length > 0) {
+        // Sắp xếp RSI entries theo thứ tự timeframe (từ nhỏ đến lớn)
+        const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Hour1', 'Hour4', 'Day1', 'Week1', 'Month1'];
+        rsiEntries.sort((a, b) => {
+          const indexA = timeframeOrder.indexOf(a[0]);
+          const indexB = timeframeOrder.indexOf(b[0]);
+          return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+        });
+        
+        // Tạo chuỗi RSI cho các timeframes với format đẹp hơn
+        const rsiStrings = rsiEntries.map(([timeframe, rsi]) => {
+          const formattedTF = formatTimeframe(timeframe);
+          const status = getRSIStatus(rsi);
+          let emoji = '⚪'; // neutral
+          let rsiValue = rsi.toFixed(1);
+          
+          if (status === 'oversold') {
+            emoji = '🟢'; // oversold (có thể mua vào)
+            rsiValue = `*${rsiValue}*`; // Bold cho oversold
+          } else if (status === 'overbought') {
+            emoji = '🔴'; // overbought (có thể bán ra)
+            rsiValue = `*${rsiValue}*`; // Bold cho overbought
+          }
+          
+          return `${formattedTF}${emoji}${rsiValue}`;
+        });
+        
+        message += `   📊 RSI: ${rsiStrings.join(' • ')}\n`;
+        
+        // Hiển thị confluence nếu có (nổi bật hơn)
+        if (token.rsiConfluence && token.rsiConfluence.hasConfluence) {
+          const confluenceEmoji = token.rsiConfluence.status === 'oversold' ? '🟢' : '🔴';
+          const confluenceText = token.rsiConfluence.status === 'oversold' 
+            ? 'OVERSOLD CONFLUENCE ⬆️' 
+            : 'OVERBOUGHT CONFLUENCE ⬇️';
+          const timeframesList = token.rsiConfluence.timeframes.map(tf => formatTimeframe(tf)).join(', ');
+          
+          message += `   ${confluenceEmoji} *${confluenceText}* \\(${token.rsiConfluence.count} TFs: ${timeframesList}\\)\n`;
+        }
+      } else {
+        // Nếu không có RSI data, thông báo
+        message += `   📊 RSI: ⚠️ Không có dữ liệu\n`;
+      }
+    } else {
+      // Nếu không có RSI object, thông báo
+      message += `   📊 RSI: ⚠️ Chưa tính toán\n`;
     }
     
     if (token.riseFallValue !== undefined && token.riseFallValue !== null && !isNaN(token.riseFallValue)) {
