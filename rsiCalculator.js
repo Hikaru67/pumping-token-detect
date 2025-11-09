@@ -140,6 +140,7 @@ export function formatTimeframe(timeframe) {
     'Min30': '30m',
     'Hour1': '1h',
     'Hour4': '4h',
+    'Hour8': '8h',
     'Day1': '1d',
     'Week1': '1w',
     'Month1': '1M',

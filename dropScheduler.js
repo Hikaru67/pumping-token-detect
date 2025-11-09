@@ -68,6 +68,7 @@ async function checkDropTokens() {
     let newWhitelist = [];
     let shouldSendAlert = false;
     let alertReason = '';
+    let confluenceInfo = null;
     
     if (previousData === null) {
       console.log('📝 [DROP] Lần đầu chạy - Gửi top 10 drop hiện tại');
@@ -109,21 +110,29 @@ async function checkDropTokens() {
         newWhitelist = previousData.top1Whitelist || [];
       }
 
-      // Kiểm tra RSI confluence increase
-      const confluenceInfo = getRSIConfluenceIncreaseInfo(top10, previousData);
+      // Kiểm tra RSI confluence increase (chỉ trigger khi có ít nhất 1 timeframe lớn: 4h, 8h, 1d)
+      confluenceInfo = getRSIConfluenceIncreaseInfo(top10, previousData);
       
       if (confluenceInfo.hasIncrease) {
-        console.log(`\n📊 [DROP] Phát hiện RSI Confluence tăng cho ${confluenceInfo.count} token(s):`);
+        console.log(`\n📊 [DROP] Phát hiện RSI Confluence tăng cho ${confluenceInfo.count} token(s) (có ít nhất 1 timeframe lớn: 4h, 8h, 1d):`);
         
         confluenceInfo.increases.forEach(increase => {
           const statusEmoji = increase.currentConfluence.status === 'oversold' ? '🟢' : '🔴';
           const statusText = increase.currentConfluence.status === 'oversold' ? 'Oversold' : 'Overbought';
           const timeframesList = increase.currentConfluence.timeframes.join(', ');
           
-          console.log(`   🚨 [DROP] ${increase.token.symbol}: ${statusText} Confluence tăng từ ${increase.previousCount} → ${increase.currentCount} TFs (${timeframesList})`);
+          // Tìm các timeframe lớn trong confluence
+          const largeTimeframes = increase.currentConfluence.timeframes.filter(tf => 
+            ['Hour4', 'Hour8', 'Day1'].includes(tf)
+          );
+          const largeTimeframesStr = largeTimeframes.length > 0 
+            ? ` [Timeframes lớn: ${largeTimeframes.join(', ')}]` 
+            : '';
+          
+          console.log(`   🚨 [DROP] ${increase.token.symbol}: ${statusText} Confluence tăng từ ${increase.previousCount} → ${increase.currentCount} TFs (${timeframesList})${largeTimeframesStr}`);
         });
         
-        // Trigger alert khi có confluence increase
+        // Trigger alert khi có confluence increase với timeframe lớn
         shouldSendAlert = true;
         if (alertReason) {
           alertReason += ' + RSI Confluence tăng';
@@ -131,14 +140,16 @@ async function checkDropTokens() {
           alertReason = 'RSI Confluence tăng';
         }
       } else {
-        console.log('✅ [DROP] Không có RSI Confluence tăng');
+        console.log('✅ [DROP] Không có RSI Confluence tăng (hoặc không có timeframe lớn: 4h, 8h, 1d)');
       }
     }
 
     // Gửi alert nếu cần
     if (shouldSendAlert) {
       console.log(`\n📨 [DROP] Gửi alert Telegram (Lý do: ${alertReason})`);
-      await sendTelegramDropAlert(top10, alertReason);
+      // Chỉ truyền confluenceInfo nếu alertReason có chứa "RSI Confluence tăng"
+      const infoToSend = alertReason.includes('RSI Confluence tăng') ? confluenceInfo : null;
+      await sendTelegramDropAlert(top10, alertReason, infoToSend);
     } else {
       console.log('✅ [DROP] Không có thay đổi đáng kể, bỏ qua alert');
     }

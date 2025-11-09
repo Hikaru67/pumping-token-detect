@@ -103,7 +103,25 @@ export function updateTop1Whitelist(previousData, newTop1BaseSymbol) {
 }
 
 /**
+ * Kiểm tra xem confluence có chứa ít nhất 1 timeframe lớn (4h, 8h, 1d) không
+ * @param {Object} confluence - Confluence object từ checkRSIConfluence
+ * @returns {boolean} true nếu có ít nhất 1 timeframe lớn trong confluence
+ */
+function hasLargeTimeframeInConfluence(confluence) {
+  if (!confluence || !confluence.hasConfluence || !confluence.timeframes) {
+    return false;
+  }
+
+  // Các timeframe lớn: 4h, 8h, 1d
+  const largeTimeframes = ['Hour4', 'Hour8', 'Day1'];
+  
+  // Kiểm tra xem có ít nhất 1 timeframe lớn trong confluence không
+  return confluence.timeframes.some(tf => largeTimeframes.includes(tf));
+}
+
+/**
  * Phát hiện các token có RSI confluence tăng so với lần check trước
+ * Chỉ trả về các token có confluence tăng VÀ có ít nhất 1 timeframe lớn (4h, 8h, 1d) trong confluence hiện tại
  * @param {Array} currentTop10 - Top 10 hiện tại (có RSI data)
  * @param {Object} previousData - Dữ liệu top 10 trước đó (có thể null)
  * @returns {Array} Mảng các token có confluence tăng: [{ token, previousCount, currentCount, increase }]
@@ -145,8 +163,8 @@ export function detectRSIConfluenceIncrease(currentTop10, previousData) {
     const currentCount = currentConfluence.hasConfluence ? (currentConfluence.count || 0) : 0;
     const previousCount = previousConfluence.hasConfluence ? (previousConfluence.count || 0) : 0;
 
-    // Nếu confluence count tăng
-    if (currentCount > previousCount) {
+    // Nếu confluence count tăng VÀ confluence hiện tại có ít nhất 1 timeframe lớn
+    if (currentCount > previousCount && hasLargeTimeframeInConfluence(currentConfluence)) {
       increases.push({
         token: currentToken,
         previousCount,

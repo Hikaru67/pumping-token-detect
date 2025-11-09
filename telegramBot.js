@@ -26,9 +26,10 @@ function escapeMarkdown(text) {
  * Format thông báo alert cho Telegram
  * @param {Array} top10 - Top 10 token
  * @param {string} alertReason - Lý do gửi alert (optional)
+ * @param {Object} confluenceInfo - Thông tin RSI confluence increase (optional)
  * @returns {string} Message đã format
  */
-function formatAlertMessage(top10, alertReason = '') {
+function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
   // Validate input
   if (!Array.isArray(top10) || top10.length === 0) {
     return '⚠️ Không có dữ liệu để hiển thị';
@@ -50,7 +51,17 @@ function formatAlertMessage(top10, alertReason = '') {
   if (alertReason) {
     if (alertReason.includes('RSI Confluence tăng')) {
       message += '📊 *🚨 RSI CONFLUENCE TĂNG 🚨*\n';
-      message += '⚠️ Một hoặc nhiều token có số lượng timeframes với RSI confluence tăng lên\n\n';
+      
+      // Hiển thị danh sách token thay đổi nếu có
+      if (confluenceInfo && confluenceInfo.increases && confluenceInfo.increases.length > 0) {
+        const tokenList = confluenceInfo.increases.map(increase => {
+          const cleanSymbolName = escapeMarkdown(cleanSymbol(increase.token.symbol));
+          return `$${cleanSymbolName}`;
+        }).join(', ');
+        message += `⚠️ RSI confluence tăng: ${tokenList}\n\n`;
+      } else {
+        message += '⚠️ RSI confluence tăng\n\n';
+      }
     } else if (alertReason.includes('Top 1 thay đổi')) {
       message += '🔄 *🚨 TOP 1 THAY ĐỔI 🚨*\n\n';
     } else if (alertReason.includes('Lần đầu chạy')) {
@@ -84,7 +95,7 @@ function formatAlertMessage(top10, alertReason = '') {
       
       if (rsiEntries.length > 0) {
         // Sắp xếp RSI entries theo thứ tự timeframe (từ nhỏ đến lớn)
-        const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Hour1', 'Hour4', 'Day1', 'Week1', 'Month1'];
+        const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Hour1', 'Hour4', 'Hour8', 'Day1', 'Week1', 'Month1'];
         rsiEntries.sort((a, b) => {
           const indexA = timeframeOrder.indexOf(a[0]);
           const indexB = timeframeOrder.indexOf(b[0]);
@@ -181,9 +192,10 @@ function formatNumber(num) {
  * Format thông báo alert cho Drop Tokens
  * @param {Array} top10 - Top 10 drop tokens
  * @param {string} alertReason - Lý do gửi alert (optional)
+ * @param {Object} confluenceInfo - Thông tin RSI confluence increase (optional)
  * @returns {string} Message đã format
  */
-function formatDropAlertMessage(top10, alertReason = '') {
+function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) {
   // Validate input
   if (!Array.isArray(top10) || top10.length === 0) {
     return '⚠️ Không có dữ liệu để hiển thị';
@@ -205,7 +217,17 @@ function formatDropAlertMessage(top10, alertReason = '') {
   if (alertReason) {
     if (alertReason.includes('RSI Confluence tăng')) {
       message += '📊 *🚨 RSI CONFLUENCE TĂNG 🚨*\n';
-      message += '⚠️ Một hoặc nhiều token có số lượng timeframes với RSI confluence tăng lên\n\n';
+      
+      // Hiển thị danh sách token thay đổi nếu có
+      if (confluenceInfo && confluenceInfo.increases && confluenceInfo.increases.length > 0) {
+        const tokenList = confluenceInfo.increases.map(increase => {
+          const cleanSymbolName = escapeMarkdown(cleanSymbol(increase.token.symbol));
+          return `$${cleanSymbolName}`;
+        }).join(', ');
+        message += `⚠️ RSI confluence tăng: ${tokenList}\n\n`;
+      } else {
+        message += '⚠️ RSI confluence tăng\n\n';
+      }
     } else if (alertReason.includes('Top 1 thay đổi')) {
       message += '🔄 *🚨 TOP 1 THAY ĐỔI 🚨*\n\n';
     } else if (alertReason.includes('Lần đầu chạy')) {
@@ -239,7 +261,7 @@ function formatDropAlertMessage(top10, alertReason = '') {
       
       if (rsiEntries.length > 0) {
         // Sắp xếp RSI entries theo thứ tự timeframe (từ nhỏ đến lớn)
-        const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Hour1', 'Hour4', 'Day1', 'Week1', 'Month1'];
+        const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Hour1', 'Hour4', 'Hour8', 'Day1', 'Week1', 'Month1'];
         rsiEntries.sort((a, b) => {
           const indexA = timeframeOrder.indexOf(a[0]);
           const indexB = timeframeOrder.indexOf(b[0]);
@@ -311,9 +333,10 @@ function formatDropAlertMessage(top10, alertReason = '') {
  * Gửi thông báo đến Telegram
  * @param {Array} top10 - Top 10 token
  * @param {string} alertReason - Lý do gửi alert (optional)
+ * @param {Object} confluenceInfo - Thông tin RSI confluence increase (optional)
  * @returns {Promise<boolean>} true nếu gửi thành công
  */
-export async function sendTelegramAlert(top10, alertReason = '') {
+export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo = null) {
   if (!config.telegramBotToken || !config.telegramChatId) {
     console.warn('⚠️  Telegram chưa được cấu hình, bỏ qua việc gửi thông báo');
     return false;
@@ -326,7 +349,7 @@ export async function sendTelegramAlert(top10, alertReason = '') {
   }
 
   try {
-    const message = formatAlertMessage(top10, alertReason);
+    const message = formatAlertMessage(top10, alertReason, confluenceInfo);
     const TELEGRAM_API_URL = `https://api.telegram.org/bot${config.telegramBotToken}`;
     
     const response = await axios.post(
@@ -366,9 +389,10 @@ export async function sendTelegramAlert(top10, alertReason = '') {
  * Gửi thông báo Drop Tokens đến Telegram channel riêng
  * @param {Array} top10 - Top 10 drop tokens
  * @param {string} alertReason - Lý do gửi alert (optional)
+ * @param {Object} confluenceInfo - Thông tin RSI confluence increase (optional)
  * @returns {Promise<boolean>} true nếu gửi thành công
  */
-export async function sendTelegramDropAlert(top10, alertReason = '') {
+export async function sendTelegramDropAlert(top10, alertReason = '', confluenceInfo = null) {
   if (!config.telegramBotToken || !config.telegramDropChatId) {
     console.warn('⚠️  Telegram Drop channel chưa được cấu hình, bỏ qua việc gửi thông báo drop');
     return false;
@@ -381,7 +405,7 @@ export async function sendTelegramDropAlert(top10, alertReason = '') {
   }
 
   try {
-    const message = formatDropAlertMessage(top10, alertReason);
+    const message = formatDropAlertMessage(top10, alertReason, confluenceInfo);
     const TELEGRAM_API_URL = `https://api.telegram.org/bot${config.telegramBotToken}`;
     
     const response = await axios.post(
