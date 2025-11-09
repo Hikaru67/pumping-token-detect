@@ -81,7 +81,7 @@ function getIntervalSeconds(interval) {
     'Month1': 2592000,
   };
   
-  return intervalMap[interval] || 900; // Mặc định 15 phút nếu không tìm thấy
+  return intervalMap[interval] || 86400; // Mặc định 15 phút nếu không tìm thấy
 }
 
 /**
