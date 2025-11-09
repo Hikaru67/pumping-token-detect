@@ -102,3 +102,78 @@ export function updateTop1Whitelist(previousData, newTop1BaseSymbol) {
   return newWhitelist.slice(0, 2);
 }
 
+/**
+ * Phát hiện các token có RSI confluence tăng so với lần check trước
+ * @param {Array} currentTop10 - Top 10 hiện tại (có RSI data)
+ * @param {Object} previousData - Dữ liệu top 10 trước đó (có thể null)
+ * @returns {Array} Mảng các token có confluence tăng: [{ token, previousCount, currentCount, increase }]
+ */
+export function detectRSIConfluenceIncrease(currentTop10, previousData) {
+  // Lần chạy đầu tiên, không có dữ liệu để so sánh
+  if (!previousData || !previousData.top10 || previousData.top10.length === 0) {
+    return [];
+  }
+
+  const previousTop10 = previousData.top10;
+  const increases = [];
+
+  // Tạo map của previousTop10 để tra cứu nhanh theo symbol
+  const previousTokenMap = new Map();
+  previousTop10.forEach(token => {
+    if (token && token.symbol) {
+      previousTokenMap.set(token.symbol, token);
+    }
+  });
+
+  // So sánh từng token trong currentTop10
+  currentTop10.forEach(currentToken => {
+    if (!currentToken || !currentToken.symbol) {
+      return;
+    }
+
+    const previousToken = previousTokenMap.get(currentToken.symbol);
+    
+    // Nếu token không có trong previous data, bỏ qua (token mới)
+    if (!previousToken) {
+      return;
+    }
+
+    // Lấy RSI confluence count hiện tại và trước đó
+    const currentConfluence = currentToken.rsiConfluence || {};
+    const previousConfluence = previousToken.rsiConfluence || {};
+    
+    const currentCount = currentConfluence.hasConfluence ? (currentConfluence.count || 0) : 0;
+    const previousCount = previousConfluence.hasConfluence ? (previousConfluence.count || 0) : 0;
+
+    // Nếu confluence count tăng
+    if (currentCount > previousCount) {
+      increases.push({
+        token: currentToken,
+        previousCount,
+        currentCount,
+        increase: currentCount - previousCount,
+        previousConfluence: previousConfluence,
+        currentConfluence: currentConfluence,
+      });
+    }
+  });
+
+  return increases;
+}
+
+/**
+ * Lấy thông tin chi tiết về RSI confluence increase
+ * @param {Array} currentTop10 - Top 10 hiện tại (có RSI data)
+ * @param {Object} previousData - Dữ liệu top 10 trước đó
+ * @returns {Object} Thông tin về confluence increase
+ */
+export function getRSIConfluenceIncreaseInfo(currentTop10, previousData) {
+  const increases = detectRSIConfluenceIncrease(currentTop10, previousData);
+
+  return {
+    hasIncrease: increases.length > 0,
+    increases: increases,
+    count: increases.length,
+  };
+}
+

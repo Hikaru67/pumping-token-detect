@@ -25,9 +25,10 @@ function escapeMarkdown(text) {
 /**
  * Format thông báo alert cho Telegram
  * @param {Array} top10 - Top 10 token
+ * @param {string} alertReason - Lý do gửi alert (optional)
  * @returns {string} Message đã format
  */
-function formatAlertMessage(top10) {
+function formatAlertMessage(top10, alertReason = '') {
   // Validate input
   if (!Array.isArray(top10) || top10.length === 0) {
     return '⚠️ Không có dữ liệu để hiển thị';
@@ -43,7 +44,21 @@ function formatAlertMessage(top10) {
     second: '2-digit'
   });
 
-  let message = '*TOP 10 PUMP TOKENS*\n\n';
+  let message = '*TOP 10 PUMP TOKENS*\n';
+  
+  // Thêm lý do alert nếu có
+  if (alertReason) {
+    if (alertReason.includes('RSI Confluence tăng')) {
+      message += '📊 *🚨 RSI CONFLUENCE TĂNG 🚨*\n';
+      message += '⚠️ Một hoặc nhiều token có số lượng timeframes với RSI confluence tăng lên\n\n';
+    } else if (alertReason.includes('Top 1 thay đổi')) {
+      message += '🔄 *🚨 TOP 1 THAY ĐỔI 🚨*\n\n';
+    } else if (alertReason.includes('Lần đầu chạy')) {
+      message += '📝 *Lần đầu chạy*\n\n';
+    }
+  } else {
+    message += '\n';
+  }
 
   const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
   
@@ -165,9 +180,10 @@ function formatNumber(num) {
 /**
  * Gửi thông báo đến Telegram
  * @param {Array} top10 - Top 10 token
+ * @param {string} alertReason - Lý do gửi alert (optional)
  * @returns {Promise<boolean>} true nếu gửi thành công
  */
-export async function sendTelegramAlert(top10) {
+export async function sendTelegramAlert(top10, alertReason = '') {
   if (!config.telegramBotToken || !config.telegramChatId) {
     console.warn('⚠️  Telegram chưa được cấu hình, bỏ qua việc gửi thông báo');
     return false;
@@ -180,7 +196,7 @@ export async function sendTelegramAlert(top10) {
   }
 
   try {
-    const message = formatAlertMessage(top10);
+    const message = formatAlertMessage(top10, alertReason);
     const TELEGRAM_API_URL = `https://api.telegram.org/bot${config.telegramBotToken}`;
     
     const response = await axios.post(
