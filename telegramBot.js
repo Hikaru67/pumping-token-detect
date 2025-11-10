@@ -105,7 +105,7 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
         // Tạo chuỗi RSI cho các timeframes với format đẹp hơn
         const rsiStrings = rsiEntries.map(([timeframe, rsi]) => {
           const formattedTF = formatTimeframe(timeframe);
-          const status = getRSIStatus(rsi);
+          const status = getRSIStatus(rsi, timeframe);
           let emoji = '⚪'; // neutral
           let rsiValue = rsi.toFixed(1);
           
@@ -271,7 +271,7 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
         // Tạo chuỗi RSI cho các timeframes với format đẹp hơn
         const rsiStrings = rsiEntries.map(([timeframe, rsi]) => {
           const formattedTF = formatTimeframe(timeframe);
-          const status = getRSIStatus(rsi);
+          const status = getRSIStatus(rsi, timeframe);
           let emoji = '⚪'; // neutral
           let rsiValue = rsi.toFixed(1);
           

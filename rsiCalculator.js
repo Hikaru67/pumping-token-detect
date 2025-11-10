@@ -47,18 +47,37 @@ export function calculateRSI(closes, period = config.rsiPeriod) {
 }
 
 /**
+ * Kiểm tra xem timeframe có phải là khung bé (minutes) không
+ * @param {string} timeframe - Timeframe (ví dụ: 'Min15', 'Hour1')
+ * @returns {boolean} true nếu là khung bé (minutes)
+ */
+function isSmallTimeframe(timeframe) {
+  if (!timeframe) return false;
+  // Khung bé: Min1, Min5, Min15, Min30
+  return timeframe.startsWith('Min');
+}
+
+/**
  * Xác định trạng thái RSI (oversold, neutral, overbought)
  * @param {number} rsi - Giá trị RSI
+ * @param {string} timeframe - Timeframe (optional, để xác định threshold cho overbought)
  * @returns {string} 'oversold' | 'neutral' | 'overbought'
  */
-export function getRSIStatus(rsi) {
+export function getRSIStatus(rsi, timeframe = null) {
   if (rsi === null || isNaN(rsi)) {
     return 'neutral';
   }
 
   if (rsi < config.rsiOversoldThreshold) {
     return 'oversold';
-  } else if (rsi > config.rsiOverboughtThreshold) {
+  }
+  
+  // Sử dụng threshold khác nhau cho overbought tùy theo timeframe
+  const overboughtThreshold = isSmallTimeframe(timeframe) 
+    ? config.rsiOverboughtThresholdSmall 
+    : config.rsiOverboughtThreshold;
+  
+  if (rsi > overboughtThreshold) {
     return 'overbought';
   } else {
     return 'neutral';
@@ -89,7 +108,7 @@ export function checkRSIConfluence(rsiData) {
 
   Object.entries(rsiData).forEach(([timeframe, rsi]) => {
     if (rsi !== null && !isNaN(rsi)) {
-      const status = getRSIStatus(rsi);
+      const status = getRSIStatus(rsi, timeframe);
       statusCounts[status].push(timeframe);
     }
   });

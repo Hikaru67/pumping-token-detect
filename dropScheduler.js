@@ -180,7 +180,8 @@ export function startDropScheduler() {
   console.log(`   - Timeframes: ${config.rsiTimeframes.join(', ')}`);
   console.log(`   - Period: ${config.rsiPeriod}`);
   console.log(`   - Oversold: < ${config.rsiOversoldThreshold}`);
-  console.log(`   - Overbought: > ${config.rsiOverboughtThreshold}`);
+  console.log(`   - Overbought (khung lớn - h/d): > ${config.rsiOverboughtThreshold}`);
+  console.log(`   - Overbought (khung bé - m): > ${config.rsiOverboughtThresholdSmall}`);
   console.log(`   - Confluence min timeframes: ${config.rsiConfluenceMinTimeframes}`);
   
   if (!config.telegramBotToken || !config.telegramDropChatId) {
