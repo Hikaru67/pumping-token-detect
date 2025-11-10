@@ -2,6 +2,8 @@
 
 Hệ thống tự động theo dõi và cảnh báo top 10 token có tỷ lệ pump cao nhất trong 24h từ MEXC Futures API, tự động gửi thông báo Telegram khi có thay đổi ở top 3.
 
+📢 **Channel Telegram:** [@pumping_token_detect](https://t.me/pumping_token_detect)
+
 ## ✨ Tính năng
 
 - 📊 Theo dõi top 10 token có **riseFallRate** cao nhất (tỷ lệ biến động giá trong 24h)
