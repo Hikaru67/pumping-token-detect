@@ -334,9 +334,10 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
  * @param {Array} top10 - Top 10 token
  * @param {string} alertReason - Lý do gửi alert (optional)
  * @param {Object} confluenceInfo - Thông tin RSI confluence increase (optional)
+ * @param {boolean} forceSilent - Bắt buộc gửi ở chế độ im lặng (override config)
  * @returns {Promise<boolean>} true nếu gửi thành công
  */
-export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo = null) {
+export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo = null, forceSilent = false) {
   if (!config.telegramBotToken || !config.telegramChatId) {
     console.warn('⚠️  Telegram chưa được cấu hình, bỏ qua việc gửi thông báo');
     return false;
@@ -352,6 +353,9 @@ export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo 
     const message = formatAlertMessage(top10, alertReason, confluenceInfo);
     const TELEGRAM_API_URL = `https://api.telegram.org/bot${config.telegramBotToken}`;
     
+    // Nếu forceSilent = true, luôn bật silent mode; ngược lại dùng config
+    const disableNotification = forceSilent ? true : config.telegramDisableNotification;
+    
     const response = await axios.post(
       `${TELEGRAM_API_URL}/sendMessage`,
       {
@@ -359,7 +363,7 @@ export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo 
         text: message,
         parse_mode: 'Markdown',
         disable_web_page_preview: true,
-        disable_notification: config.telegramDisableNotification, // Silent mode (không có âm thanh/thông báo)
+        disable_notification: disableNotification, // Silent mode (không có âm thanh/thông báo)
       },
       {
         timeout: 10000,
@@ -391,9 +395,10 @@ export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo 
  * @param {Array} top10 - Top 10 drop tokens
  * @param {string} alertReason - Lý do gửi alert (optional)
  * @param {Object} confluenceInfo - Thông tin RSI confluence increase (optional)
+ * @param {boolean} forceSilent - Bắt buộc gửi ở chế độ im lặng (override config)
  * @returns {Promise<boolean>} true nếu gửi thành công
  */
-export async function sendTelegramDropAlert(top10, alertReason = '', confluenceInfo = null) {
+export async function sendTelegramDropAlert(top10, alertReason = '', confluenceInfo = null, forceSilent = false) {
   if (!config.telegramBotToken || !config.telegramDropChatId) {
     console.warn('⚠️  Telegram Drop channel chưa được cấu hình, bỏ qua việc gửi thông báo drop');
     return false;
@@ -409,6 +414,9 @@ export async function sendTelegramDropAlert(top10, alertReason = '', confluenceI
     const message = formatDropAlertMessage(top10, alertReason, confluenceInfo);
     const TELEGRAM_API_URL = `https://api.telegram.org/bot${config.telegramBotToken}`;
     
+    // Nếu forceSilent = true, luôn bật silent mode; ngược lại dùng config
+    const disableNotification = forceSilent ? true : config.telegramDropDisableNotification;
+    
     const response = await axios.post(
       `${TELEGRAM_API_URL}/sendMessage`,
       {
@@ -416,7 +424,7 @@ export async function sendTelegramDropAlert(top10, alertReason = '', confluenceI
         text: message,
         parse_mode: 'Markdown',
         disable_web_page_preview: true,
-        disable_notification: config.telegramDropDisableNotification, // Silent mode cho drop alerts (không có âm thanh/thông báo)
+        disable_notification: disableNotification, // Silent mode cho drop alerts (không có âm thanh/thông báo)
       },
       {
         timeout: 10000,

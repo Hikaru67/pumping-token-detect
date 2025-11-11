@@ -9,6 +9,26 @@ export function getBaseSymbol(symbol) {
 }
 
 /**
+ * Kiểm tra xem giờ hiện tại có nằm trong khung giờ im lặng (23h-1h) không
+ * Trong khung giờ này sẽ không notify theo điều kiện top 1 thay đổi
+ * @returns {boolean} true nếu đang trong khung giờ 23h-1h
+ */
+export function isQuietHours() {
+  const now = new Date();
+  // Sử dụng timezone Asia/Ho_Chi_Minh
+  const hour = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: 'numeric',
+    hour12: false
+  }).formatToParts(now).find(part => part.type === 'hour').value;
+  
+  const currentHour = parseInt(hour, 10);
+  
+  // Khung giờ 23h-1h: từ 23:00 đến 00:59
+  return currentHour >= 23 || currentHour < 1;
+}
+
+/**
  * Phát hiện thay đổi trong top 1
  * So sánh base symbol (bỏ đuôi _USDT/_USDC) để tránh alert khi cùng mã nhưng khác đuôi
  * Kiểm tra whitelist: nếu top 1 mới nằm trong whitelist thì không alert
