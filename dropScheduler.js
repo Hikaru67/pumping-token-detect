@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { fetchTickerData } from './apiClient.js';
 import { getTop10DropTokens, addRSIToTop10 } from './dataProcessor.js';
 import { saveTop10Drop, loadTop10Drop } from './storage.js';
-import { detectTop1Change, getTop1ChangeInfo, updateTop1Whitelist, getBaseSymbol, getRSIConfluenceIncreaseInfo } from './comparator.js';
+import { detectTop1Change, getTop1ChangeInfo, updateTop1Whitelist, getBaseSymbol, getRSIConfluenceIncreaseInfo, isQuietHours } from './comparator.js';
 import { sendTelegramDropAlert } from './telegramBot.js';
 import { config } from './config.js';
 
@@ -93,12 +93,21 @@ async function checkDropTokens() {
           console.log(`   [DROP] Top 1 trước: ${changeInfo.previousTop1 ? changeInfo.previousTop1.symbol : 'N/A'}`);
           console.log(`   [DROP] Top 1 hiện tại: ${changeInfo.currentTop1 ? changeInfo.currentTop1.symbol : 'N/A'} (trong whitelist)`);
         } else {
-          console.log('🚨 [DROP] Phát hiện thay đổi ở top 1!');
+          const inQuietHours = isQuietHours();
+          if (inQuietHours) {
+            console.log('🌙 [DROP] Phát hiện thay đổi ở top 1 (khung giờ im lặng 23h-1h - sẽ gửi im lặng)');
+          } else {
+            console.log('🚨 [DROP] Phát hiện thay đổi ở top 1!');
+          }
           console.log(`   [DROP] Top 1 trước: ${changeInfo.previousTop1 ? changeInfo.previousTop1.symbol : 'N/A'}`);
           console.log(`   [DROP] Top 1 hiện tại: ${changeInfo.currentTop1 ? changeInfo.currentTop1.symbol : 'N/A'}`);
           
           shouldSendAlert = true;
           alertReason = 'Top 1 thay đổi';
+          // Lưu flag để biết có cần gửi im lặng không
+          if (inQuietHours) {
+            alertReason += ' [Quiet Hours]';
+          }
         }
         
         // Cập nhật whitelist: thêm top 1 mới vào whitelist (chỉ giữ 3 gần nhất)
@@ -146,10 +155,18 @@ async function checkDropTokens() {
 
     // Gửi alert nếu cần
     if (shouldSendAlert) {
-      console.log(`\n📨 [DROP] Gửi alert Telegram (Lý do: ${alertReason})`);
+      const isQuietHoursMode = alertReason.includes('[Quiet Hours]');
+      const cleanAlertReason = alertReason.replace(' [Quiet Hours]', '');
+      
+      if (isQuietHoursMode) {
+        console.log(`\n📨 [DROP] Gửi alert Telegram im lặng (Lý do: ${cleanAlertReason}) - Khung giờ 23h-1h`);
+      } else {
+        console.log(`\n📨 [DROP] Gửi alert Telegram (Lý do: ${cleanAlertReason})`);
+      }
+      
       // Chỉ truyền confluenceInfo nếu alertReason có chứa "RSI Confluence tăng"
-      const infoToSend = alertReason.includes('RSI Confluence tăng') ? confluenceInfo : null;
-      await sendTelegramDropAlert(top10, alertReason, infoToSend);
+      const infoToSend = cleanAlertReason.includes('RSI Confluence tăng') ? confluenceInfo : null;
+      await sendTelegramDropAlert(top10, cleanAlertReason, infoToSend, isQuietHoursMode);
     } else {
       console.log('✅ [DROP] Không có thay đổi đáng kể, bỏ qua alert');
     }
