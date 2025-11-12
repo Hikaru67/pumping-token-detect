@@ -28,6 +28,7 @@ function delay(ms) {
  * @returns {Promise<Object>} Object chứa RSI của các timeframes và confluence info
  */
 async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
+  console.log('🚀 ~ symbol:', symbol)
   const rsiData = {};
   const errors = [];
 
