@@ -211,12 +211,12 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
     second: '2-digit'
   });
 
-  let message = '*TOP 10 DROP TOKENS* 🔻\n';
+  let message = '';
   
   // Thêm lý do alert nếu có
   if (alertReason) {
     if (alertReason.includes('RSI Confluence tăng')) {
-      message += '📊 *🚨 RSI CONFLUENCE TĂNG 🚨*\n';
+      message += '⚠️ RSI CONFLUENCE TĂNG';
       
       // Hiển thị danh sách token thay đổi nếu có
       if (confluenceInfo && confluenceInfo.increases && confluenceInfo.increases.length > 0) {
@@ -224,9 +224,9 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
           const cleanSymbolName = escapeMarkdown(cleanSymbol(increase.token.symbol));
           return `$${cleanSymbolName}`;
         }).join(', ');
-        message += `⚠️ RSI confluence tăng: ${tokenList}\n\n`;
+        message += `: ${tokenList}\n\n`;
       } else {
-        message += '⚠️ RSI confluence tăng\n\n';
+        message += '\n\n';
       }
     } else if (alertReason.includes('Top 1 thay đổi')) {
       message += '🔄 *🚨 TOP 1 THAY ĐỔI 🚨*\n\n';
