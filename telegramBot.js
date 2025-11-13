@@ -45,7 +45,7 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
     second: '2-digit'
   });
 
-  let message = '*TOP 10 PUMP TOKENS*\n';
+  let message = '';
   
   // Thêm lý do alert nếu có
   if (alertReason) {
