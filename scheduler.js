@@ -47,7 +47,7 @@ async function checkPumpTokens() {
 
     // 3. Tính RSI cho top 10 tokens
     console.log('\n📊 Đang tính RSI cho top 10 tokens...');
-    const top10 = await addRSIToTop10(top10WithoutRSI);
+    const top10 = await addRSIToTop10(top10WithoutRSI, true); // true = pump alert
     
     // Log RSI confluence nếu có
     top10.forEach(token => {

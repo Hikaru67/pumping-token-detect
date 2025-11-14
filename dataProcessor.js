@@ -1,5 +1,5 @@
 import { fetchKlineData } from './apiClient.js';
-import { calculateRSI, checkRSIConfluence, formatTimeframe } from './rsiCalculator.js';
+import { calculateRSI, checkRSIConfluence, formatTimeframe, getRSIStatus } from './rsiCalculator.js';
 import { config } from './config.js';
 
 /**
@@ -176,11 +176,107 @@ export function getTop10PumpTokens(data) {
 }
 
 /**
+ * Tính số lượng timeframes có RSI overbought/oversold
+ * @param {Object} rsiData - Object chứa RSI của các timeframes
+ * @returns {Object} { overboughtCount, oversoldCount }
+ */
+function countRSIOverboughtOversold(rsiData) {
+  if (!rsiData || typeof rsiData !== 'object') {
+    return { overboughtCount: 0, oversoldCount: 0 };
+  }
+
+  let overboughtCount = 0;
+  let oversoldCount = 0;
+
+  Object.entries(rsiData).forEach(([timeframe, rsi]) => {
+    if (rsi !== null && !isNaN(rsi)) {
+      const status = getRSIStatus(rsi, timeframe);
+      if (status === 'overbought') {
+        overboughtCount++;
+      } else if (status === 'oversold') {
+        oversoldCount++;
+      }
+    }
+  });
+
+  return { overboughtCount, oversoldCount };
+}
+
+/**
+ * Tính tổng số lượng RSI quá bán (oversold) - tổng số timeframes có RSI oversold
+ * @param {Object} rsiData - Object chứa RSI của các timeframes
+ * @returns {number} Tổng số timeframes có RSI oversold
+ */
+function getTotalOversoldCount(rsiData) {
+  const counts = countRSIOverboughtOversold(rsiData);
+  return counts.oversoldCount;
+}
+
+/**
+ * Sắp xếp top 10 theo số lượng RSI overbought/oversold và tổng RSI quá bán
+ * @param {Array} top10 - Top 10 tokens đã có RSI
+ * @param {boolean} isPump - true nếu là pump alert, false nếu là drop alert
+ * @returns {Array} Top 10 tokens đã được sắp xếp lại
+ */
+function sortTop10ByRSI(top10, isPump = true) {
+  if (!Array.isArray(top10) || top10.length === 0) {
+    return top10;
+  }
+
+  // Tính toán số lượng overbought/oversold và tổng oversold cho mỗi token
+  const tokensWithRSICounts = top10.map(token => {
+    const rsiData = token.rsi || {};
+    const counts = countRSIOverboughtOversold(rsiData);
+    const totalOversold = getTotalOversoldCount(rsiData);
+    
+    return {
+      ...token,
+      _rsiOverboughtCount: counts.overboughtCount,
+      _rsiOversoldCount: counts.oversoldCount,
+      _totalOversoldCount: totalOversold,
+      // Tổng số timeframes có RSI overbought hoặc oversold
+      _totalOverboughtOversoldCount: counts.overboughtCount + counts.oversoldCount,
+    };
+  });
+
+  // Sắp xếp:
+  // 1. Theo tổng số lượng RSI overbought/oversold (nhiều nhất lên trước)
+  // 2. Theo tổng số lượng RSI quá bán (oversold):
+  //    - Pump alert: cao đến thấp
+  //    - Drop alert: thấp đến cao (ngược lại)
+  const sorted = tokensWithRSICounts.sort((a, b) => {
+    // Ưu tiên 1: Tổng số lượng overbought/oversold (nhiều nhất lên trước)
+    if (b._totalOverboughtOversoldCount !== a._totalOverboughtOversoldCount) {
+      return b._totalOverboughtOversoldCount - a._totalOverboughtOversoldCount;
+    }
+    
+    // Ưu tiên 2: Tổng số lượng RSI quá bán (oversold)
+    if (isPump) {
+      // Pump alert: cao đến thấp
+      return b._totalOversoldCount - a._totalOversoldCount;
+    } else {
+      // Drop alert: thấp đến cao (ngược lại)
+      return a._totalOversoldCount - b._totalOversoldCount;
+    }
+  });
+
+  // Loại bỏ các trường tạm thời (_rsiOverboughtCount, _rsiOversoldCount, etc.) và cập nhật rank
+  return sorted.map((token, index) => {
+    const { _rsiOverboughtCount, _rsiOversoldCount, _totalOversoldCount, _totalOverboughtOversoldCount, ...cleanToken } = token;
+    return {
+      ...cleanToken,
+      rank: index + 1,
+    };
+  });
+}
+
+/**
  * Tính RSI cho top 10 tokens
  * @param {Array} top10 - Top 10 tokens (chưa có RSI)
- * @returns {Promise<Array>} Top 10 tokens với RSI đã được tính
+ * @param {boolean} isPump - true nếu là pump alert, false nếu là drop alert (mặc định: true)
+ * @returns {Promise<Array>} Top 10 tokens với RSI đã được tính và sắp xếp lại
  */
-export async function addRSIToTop10(top10) {
+export async function addRSIToTop10(top10, isPump = true) {
   if (!Array.isArray(top10) || top10.length === 0) {
     return top10;
   }
@@ -231,7 +327,20 @@ export async function addRSIToTop10(top10) {
 
   console.log('\n✅ Đã tính RSI cho tất cả tokens');
   
-  return top10WithRSI;
+  // Sắp xếp lại top 10 theo số lượng RSI overbought/oversold và tổng RSI quá bán
+  console.log(`\n🔄 Đang sắp xếp top 10 theo RSI (${isPump ? 'Pump' : 'Drop'} alert)...`);
+  const sortedTop10 = sortTop10ByRSI(top10WithRSI, isPump);
+  
+  console.log('✅ Đã sắp xếp top 10 theo RSI:');
+  sortedTop10.forEach((token, index) => {
+    const rsiData = token.rsi || {};
+    const counts = countRSIOverboughtOversold(rsiData);
+    const totalOversold = getTotalOversoldCount(rsiData);
+    const totalOverboughtOversold = counts.overboughtCount + counts.oversoldCount;
+    console.log(`   ${index + 1}. ${token.symbol} - Overbought/Oversold: ${totalOverboughtOversold} (OB: ${counts.overboughtCount}, OS: ${counts.oversoldCount}), Tổng Oversold: ${totalOversold}`);
+  });
+  
+  return sortedTop10;
 }
 
 /**

@@ -47,7 +47,7 @@ async function checkDropTokens() {
 
     // 3. Tính RSI cho top 10 drop tokens
     console.log('\n📊 [DROP] Đang tính RSI cho top 10 drop tokens...');
-    const top10 = await addRSIToTop10(top10WithoutRSI);
+    const top10 = await addRSIToTop10(top10WithoutRSI, false); // false = drop alert
     
     // Log RSI confluence nếu có
     top10.forEach(token => {
