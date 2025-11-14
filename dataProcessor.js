@@ -213,56 +213,116 @@ function getTotalOversoldCount(rsiData) {
 }
 
 /**
+ * Tính tổng SUM giá trị RSI overbought (tổng các giá trị RSI > threshold)
+ * @param {Object} rsiData - Object chứa RSI của các timeframes
+ * @returns {number} Tổng SUM giá trị RSI overbought
+ */
+function getSumRSIOverbought(rsiData) {
+  if (!rsiData || typeof rsiData !== 'object') {
+    return 0;
+  }
+
+  let sum = 0;
+  Object.entries(rsiData).forEach(([timeframe, rsi]) => {
+    if (rsi !== null && !isNaN(rsi)) {
+      const status = getRSIStatus(rsi, timeframe);
+      if (status === 'overbought') {
+        sum += rsi;
+      }
+    }
+  });
+
+  return sum;
+}
+
+/**
+ * Tính tổng SUM giá trị RSI oversold (tổng các giá trị RSI < threshold)
+ * @param {Object} rsiData - Object chứa RSI của các timeframes
+ * @returns {number} Tổng SUM giá trị RSI oversold
+ */
+function getSumRSIOversold(rsiData) {
+  if (!rsiData || typeof rsiData !== 'object') {
+    return 0;
+  }
+
+  let sum = 0;
+  Object.entries(rsiData).forEach(([timeframe, rsi]) => {
+    if (rsi !== null && !isNaN(rsi)) {
+      const status = getRSIStatus(rsi, timeframe);
+      if (status === 'oversold') {
+        sum += rsi;
+      }
+    }
+  });
+
+  return sum;
+}
+
+/**
  * Sắp xếp top 10 theo số lượng RSI overbought/oversold và tổng RSI quá bán
  * @param {Array} top10 - Top 10 tokens đã có RSI
  * @param {boolean} isPump - true nếu là pump alert, false nếu là drop alert
  * @returns {Array} Top 10 tokens đã được sắp xếp lại
+ * 
+ * Logic sắp xếp:
+ * - Pump alert: Ưu tiên 1 = overboughtCount (nhiều nhất lên trước), Ưu tiên 2 = sumRSIOverbought (lớn đến bé)
+ * - Drop alert: Ưu tiên 1 = oversoldCount (nhiều nhất lên trước), Ưu tiên 2 = sumRSIOversold (bé đến lớn)
  */
 function sortTop10ByRSI(top10, isPump = true) {
   if (!Array.isArray(top10) || top10.length === 0) {
     return top10;
   }
 
-  // Tính toán số lượng overbought/oversold và tổng oversold cho mỗi token
+  // Tính toán số lượng overbought/oversold và tổng SUM giá trị RSI cho mỗi token
   const tokensWithRSICounts = top10.map(token => {
     const rsiData = token.rsi || {};
     const counts = countRSIOverboughtOversold(rsiData);
-    const totalOversold = getTotalOversoldCount(rsiData);
+    const sumRSIOverbought = getSumRSIOverbought(rsiData);
+    const sumRSIOversold = getSumRSIOversold(rsiData);
     
     return {
       ...token,
       _rsiOverboughtCount: counts.overboughtCount,
       _rsiOversoldCount: counts.oversoldCount,
-      _totalOversoldCount: totalOversold,
-      // Tổng số timeframes có RSI overbought hoặc oversold
-      _totalOverboughtOversoldCount: counts.overboughtCount + counts.oversoldCount,
+      _sumRSIOverbought: sumRSIOverbought,
+      _sumRSIOversold: sumRSIOversold,
     };
   });
 
   // Sắp xếp:
-  // 1. Theo tổng số lượng RSI overbought/oversold (nhiều nhất lên trước)
-  // 2. Theo tổng số lượng RSI quá bán (oversold):
-  //    - Pump alert: cao đến thấp
-  //    - Drop alert: thấp đến cao (ngược lại)
+  // 1. Ưu tiên 1: 
+  //    - Pump alert: theo overboughtCount (nhiều nhất lên trước)
+  //    - Drop alert: theo oversoldCount (nhiều nhất lên trước)
+  // 2. Ưu tiên 2: Tổng SUM giá trị RSI:
+  //    - Pump alert: sumRSIOverbought (lớn đến bé)
+  //    - Drop alert: sumRSIOversold (bé đến lớn)
   const sorted = tokensWithRSICounts.sort((a, b) => {
-    // Ưu tiên 1: Tổng số lượng overbought/oversold (nhiều nhất lên trước)
-    if (b._totalOverboughtOversoldCount !== a._totalOverboughtOversoldCount) {
-      return b._totalOverboughtOversoldCount - a._totalOverboughtOversoldCount;
+    // Ưu tiên 1: Theo overboughtCount (pump) hoặc oversoldCount (drop)
+    if (isPump) {
+      // Pump alert: sắp xếp theo overboughtCount (nhiều nhất lên trước)
+      if (b._rsiOverboughtCount !== a._rsiOverboughtCount) {
+        return b._rsiOverboughtCount - a._rsiOverboughtCount;
+      }
+    } else {
+      // Drop alert: sắp xếp theo oversoldCount (nhiều nhất lên trước)
+      if (b._rsiOversoldCount !== a._rsiOversoldCount) {
+        return b._rsiOversoldCount - a._rsiOversoldCount;
+      }
     }
     
-    // Ưu tiên 2: Tổng số lượng RSI quá bán (oversold)
+    // Ưu tiên 2: Tổng SUM giá trị RSI
     if (isPump) {
-      // Pump alert: cao đến thấp
-      return b._totalOversoldCount - a._totalOversoldCount;
+      // Pump alert: sumRSIOverbought (lớn đến bé)
+      return b._sumRSIOverbought - a._sumRSIOverbought;
     } else {
-      // Drop alert: thấp đến cao (ngược lại)
-      return a._totalOversoldCount - b._totalOversoldCount;
+      // Drop alert: sumRSIOversold (bé đến lớn)
+      return a._sumRSIOversold - b._sumRSIOversold;
     }
   });
 
   // Loại bỏ các trường tạm thời (_rsiOverboughtCount, _rsiOversoldCount, etc.) và cập nhật rank
   return sorted.map((token, index) => {
-    const { _rsiOverboughtCount, _rsiOversoldCount, _totalOversoldCount, _totalOverboughtOversoldCount, ...cleanToken } = token;
+    const { _rsiOverboughtCount, _rsiOversoldCount, _sumRSIOverbought, _sumRSIOversold, ...cleanToken } = token;
     return {
       ...cleanToken,
       rank: index + 1,
@@ -335,9 +395,13 @@ export async function addRSIToTop10(top10, isPump = true) {
   sortedTop10.forEach((token, index) => {
     const rsiData = token.rsi || {};
     const counts = countRSIOverboughtOversold(rsiData);
-    const totalOversold = getTotalOversoldCount(rsiData);
-    const totalOverboughtOversold = counts.overboughtCount + counts.oversoldCount;
-    console.log(`   ${index + 1}. ${token.symbol} - Overbought/Oversold: ${totalOverboughtOversold} (OB: ${counts.overboughtCount}, OS: ${counts.oversoldCount}), Tổng Oversold: ${totalOversold}`);
+    const sumRSIOverbought = getSumRSIOverbought(rsiData);
+    const sumRSIOversold = getSumRSIOversold(rsiData);
+    if (isPump) {
+      console.log(`   ${index + 1}. ${token.symbol} - Overbought: ${counts.overboughtCount}, Sum RSI Overbought: ${sumRSIOverbought.toFixed(2)}, Oversold: ${counts.oversoldCount}`);
+    } else {
+      console.log(`   ${index + 1}. ${token.symbol} - Oversold: ${counts.oversoldCount}, Sum RSI Oversold: ${sumRSIOversold.toFixed(2)}, Overbought: ${counts.overboughtCount}`);
+    }
   });
   
   return sortedTop10;
