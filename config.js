@@ -46,6 +46,10 @@ export const config = {
   
   // Số lượng timeframes cần có confluence (mặc định: ít nhất 2 timeframes)
   rsiConfluenceMinTimeframes: parseInt(process.env.RSI_CONFLUENCE_MIN_TIMEFRAMES || '2', 10),
+  
+  // RSI Delay Configuration (để tránh rate limit)
+  rsiDelayBetweenTimeframes: parseInt(process.env.RSI_DELAY_BETWEEN_TIMEFRAMES || '100', 10), // Delay giữa các timeframes (ms)
+  rsiDelayBetweenTokens: parseInt(process.env.RSI_DELAY_BETWEEN_TOKENS || '200', 10), // Delay giữa các tokens (ms)
 };
 
 // Validate required config

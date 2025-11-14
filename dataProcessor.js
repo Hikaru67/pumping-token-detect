@@ -13,6 +13,21 @@ function getBaseSymbol(symbol) {
 }
 
 /**
+ * Parse và format fundingRate từ token
+ * @param {*} fundingRate - Giá trị fundingRate từ API
+ * @returns {number} FundingRate đã được format (0 nếu không hợp lệ)
+ */
+function parseFundingRate(fundingRate) {
+  if (fundingRate !== undefined && 
+      fundingRate !== null && 
+      typeof fundingRate === 'number' &&
+      !isNaN(fundingRate)) {
+    return parseFloat(fundingRate.toFixed(6));
+  }
+  return 0;
+}
+
+/**
  * Delay để tránh rate limit
  * @param {number} ms - Số milliseconds cần delay
  * @returns {Promise<void>}
@@ -42,7 +57,7 @@ async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
         console.warn(`⚠️  Không có dữ liệu kline cho ${symbol} (${timeframe})`);
         rsiData[timeframe] = null;
         // Delay nhỏ trước khi tiếp tục
-        await delay(100);
+        await delay(config.rsiDelayBetweenTimeframes || 100);
         continue;
       }
 
@@ -56,7 +71,7 @@ async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
       if (closes.length < config.rsiPeriod + 1) {
         console.warn(`⚠️  Không đủ dữ liệu close price để tính RSI cho ${symbol} (${timeframe}): chỉ có ${closes.length} candles, cần ít nhất ${config.rsiPeriod + 1}`);
         rsiData[timeframe] = null;
-        await delay(100);
+        await delay(config.rsiDelayBetweenTimeframes || 100);
         continue;
       }
       
@@ -68,14 +83,14 @@ async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
         console.log(`   ✅ ${symbol} ${formatTimeframe(timeframe)}: RSI = ${rsi.toFixed(2)}`);
       }
       
-      // Delay nhỏ giữa các request để tránh rate limit (100ms)
-      await delay(100);
+      // Delay nhỏ giữa các request để tránh rate limit
+      await delay(config.rsiDelayBetweenTimeframes || 100);
     } catch (error) {
       console.warn(`⚠️  Lỗi khi tính RSI cho ${symbol} (${timeframe}): ${error.message}`);
       rsiData[timeframe] = null;
       errors.push({ timeframe, error: error.message });
       // Delay ngay cả khi có lỗi
-      await delay(100);
+      await delay(config.rsiDelayBetweenTimeframes || 100);
     }
   }
 
@@ -149,28 +164,18 @@ export function getTop10PumpTokens(data) {
   const sortedTokens = uniqueTokens.sort((a, b) => b.riseFallRate - a.riseFallRate);
 
   // Lấy top 10 và thêm rank (chưa có RSI) - PUMP TOKENS
-  const top10WithoutRSI = sortedTokens.slice(0, 10).map((token, index) => {
-    const riseFallRate = parseFloat(token.riseFallRate.toFixed(4));
-    const fundingRate = (token.fundingRate !== undefined && 
-                        token.fundingRate !== null && 
-                        typeof token.fundingRate === 'number' &&
-                        !isNaN(token.fundingRate))
-      ? parseFloat(token.fundingRate.toFixed(6)) 
-      : 0;
-
-    return {
-      rank: index + 1,
-      symbol: token.symbol,
-      riseFallRate,
-      riseFallValue: token.riseFallValue,
-      high24Price: token.high24Price,
-      lower24Price: token.lower24Price,
-      lastPrice: token.lastPrice,
-      volume24: token.volume24,
-      contractId: token.contractId,
-      fundingRate,
-    };
-  });
+  const top10WithoutRSI = sortedTokens.slice(0, 10).map((token, index) => ({
+    rank: index + 1,
+    symbol: token.symbol,
+    riseFallRate: parseFloat(token.riseFallRate.toFixed(4)),
+    riseFallValue: token.riseFallValue,
+    high24Price: token.high24Price,
+    lower24Price: token.lower24Price,
+    lastPrice: token.lastPrice,
+    volume24: token.volume24,
+    contractId: token.contractId,
+    fundingRate: parseFundingRate(token.fundingRate),
+  }));
 
   return top10WithoutRSI;
 }
@@ -203,13 +208,27 @@ function countRSIOverboughtOversold(rsiData) {
 }
 
 /**
- * Tính tổng số lượng RSI quá bán (oversold) - tổng số timeframes có RSI oversold
+ * Tính tổng SUM giá trị RSI theo status (overbought hoặc oversold)
  * @param {Object} rsiData - Object chứa RSI của các timeframes
- * @returns {number} Tổng số timeframes có RSI oversold
+ * @param {string} status - 'overbought' hoặc 'oversold'
+ * @returns {number} Tổng SUM giá trị RSI theo status
  */
-function getTotalOversoldCount(rsiData) {
-  const counts = countRSIOverboughtOversold(rsiData);
-  return counts.oversoldCount;
+function getSumRSIByStatus(rsiData, status) {
+  if (!rsiData || typeof rsiData !== 'object') {
+    return 0;
+  }
+
+  let sum = 0;
+  Object.entries(rsiData).forEach(([timeframe, rsi]) => {
+    if (rsi !== null && !isNaN(rsi)) {
+      const rsiStatus = getRSIStatus(rsi, timeframe);
+      if (rsiStatus === status) {
+        sum += rsi;
+      }
+    }
+  });
+
+  return sum;
 }
 
 /**
@@ -218,21 +237,7 @@ function getTotalOversoldCount(rsiData) {
  * @returns {number} Tổng SUM giá trị RSI overbought
  */
 function getSumRSIOverbought(rsiData) {
-  if (!rsiData || typeof rsiData !== 'object') {
-    return 0;
-  }
-
-  let sum = 0;
-  Object.entries(rsiData).forEach(([timeframe, rsi]) => {
-    if (rsi !== null && !isNaN(rsi)) {
-      const status = getRSIStatus(rsi, timeframe);
-      if (status === 'overbought') {
-        sum += rsi;
-      }
-    }
-  });
-
-  return sum;
+  return getSumRSIByStatus(rsiData, 'overbought');
 }
 
 /**
@@ -241,21 +246,7 @@ function getSumRSIOverbought(rsiData) {
  * @returns {number} Tổng SUM giá trị RSI oversold
  */
 function getSumRSIOversold(rsiData) {
-  if (!rsiData || typeof rsiData !== 'object') {
-    return 0;
-  }
-
-  let sum = 0;
-  Object.entries(rsiData).forEach(([timeframe, rsi]) => {
-    if (rsi !== null && !isNaN(rsi)) {
-      const status = getRSIStatus(rsi, timeframe);
-      if (status === 'oversold') {
-        sum += rsi;
-      }
-    }
-  });
-
-  return sum;
+  return getSumRSIByStatus(rsiData, 'oversold');
 }
 
 /**
@@ -360,9 +351,9 @@ export async function addRSIToTop10(top10, isPump = true) {
         rsiErrors: rsiInfo.errors,
       });
       
-      // Delay nhỏ giữa các token để tránh rate limit (200ms)
+      // Delay nhỏ giữa các token để tránh rate limit
       if (i < top10.length - 1) {
-        await delay(200);
+        await delay(config.rsiDelayBetweenTokens || 200);
       }
     } catch (error) {
       console.error(`❌ Lỗi khi tính RSI cho ${token.symbol}: ${error.message}`);
@@ -380,7 +371,7 @@ export async function addRSIToTop10(top10, isPump = true) {
       
       // Delay ngay cả khi có lỗi
       if (i < top10.length - 1) {
-        await delay(200);
+        await delay(config.rsiDelayBetweenTokens || 200);
       }
     }
   }
@@ -393,10 +384,12 @@ export async function addRSIToTop10(top10, isPump = true) {
   
   console.log('✅ Đã sắp xếp top 10 theo RSI:');
   sortedTop10.forEach((token, index) => {
+    // Sử dụng cached values từ sortTop10ByRSI nếu có, nếu không thì tính lại
     const rsiData = token.rsi || {};
     const counts = countRSIOverboughtOversold(rsiData);
     const sumRSIOverbought = getSumRSIOverbought(rsiData);
     const sumRSIOversold = getSumRSIOversold(rsiData);
+    
     if (isPump) {
       console.log(`   ${index + 1}. ${token.symbol} - Overbought: ${counts.overboughtCount}, Sum RSI Overbought: ${sumRSIOverbought.toFixed(2)}, Oversold: ${counts.oversoldCount}`);
     } else {
@@ -467,28 +460,18 @@ export function getTop10DropTokens(data) {
   const sortedTokens = uniqueTokens.sort((a, b) => a.riseFallRate - b.riseFallRate);
 
   // Lấy top 10 và thêm rank (chưa có RSI) - DROP TOKENS
-  const top10WithoutRSI = sortedTokens.slice(0, 10).map((token, index) => {
-    const riseFallRate = parseFloat(token.riseFallRate.toFixed(4));
-    const fundingRate = (token.fundingRate !== undefined && 
-                        token.fundingRate !== null && 
-                        typeof token.fundingRate === 'number' &&
-                        !isNaN(token.fundingRate))
-      ? parseFloat(token.fundingRate.toFixed(6)) 
-      : 0;
-
-    return {
-      rank: index + 1,
-      symbol: token.symbol,
-      riseFallRate,
-      riseFallValue: token.riseFallValue,
-      high24Price: token.high24Price,
-      lower24Price: token.lower24Price,
-      lastPrice: token.lastPrice,
-      volume24: token.volume24,
-      contractId: token.contractId,
-      fundingRate,
-    };
-  });
+  const top10WithoutRSI = sortedTokens.slice(0, 10).map((token, index) => ({
+    rank: index + 1,
+    symbol: token.symbol,
+    riseFallRate: parseFloat(token.riseFallRate.toFixed(4)),
+    riseFallValue: token.riseFallValue,
+    high24Price: token.high24Price,
+    lower24Price: token.lower24Price,
+    lastPrice: token.lastPrice,
+    volume24: token.volume24,
+    contractId: token.contractId,
+    fundingRate: parseFundingRate(token.fundingRate),
+  }));
 
   return top10WithoutRSI;
 }
