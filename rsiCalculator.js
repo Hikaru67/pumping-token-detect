@@ -157,6 +157,7 @@ export function formatTimeframe(timeframe) {
     'Min5': '5m',
     'Min15': '15m',
     'Min30': '30m',
+    'Min60': '1h',
     'Hour1': '1h',
     'Hour4': '4h',
     'Hour8': '8h',

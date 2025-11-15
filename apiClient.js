@@ -73,6 +73,7 @@ function getIntervalSeconds(interval) {
     'Min5': 300,
     'Min15': 900,
     'Min30': 1800,
+    'Min60': 3600,
     'Hour1': 3600,
     'Hour4': 14400,
     'Hour8': 28800,

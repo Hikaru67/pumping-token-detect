@@ -95,7 +95,7 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
       
       if (rsiEntries.length > 0) {
         // Sắp xếp RSI entries theo thứ tự timeframe (từ nhỏ đến lớn)
-        const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Hour1', 'Hour4', 'Hour8', 'Day1', 'Week1', 'Month1'];
+        const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Min60', 'Hour1', 'Hour4', 'Hour8', 'Day1', 'Week1', 'Month1'];
         rsiEntries.sort((a, b) => {
           const indexA = timeframeOrder.indexOf(a[0]);
           const indexB = timeframeOrder.indexOf(b[0]);
@@ -261,7 +261,7 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
       
       if (rsiEntries.length > 0) {
         // Sắp xếp RSI entries theo thứ tự timeframe (từ nhỏ đến lớn)
-        const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Hour1', 'Hour4', 'Hour8', 'Day1', 'Week1', 'Month1'];
+        const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Min60', 'Hour1', 'Hour4', 'Hour8', 'Day1', 'Week1', 'Month1'];
         rsiEntries.sort((a, b) => {
           const indexA = timeframeOrder.indexOf(a[0]);
           const indexB = timeframeOrder.indexOf(b[0]);
