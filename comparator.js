@@ -141,12 +141,16 @@ function hasLargeTimeframeInConfluence(confluence) {
 
 /**
  * Phát hiện các token có RSI confluence tăng so với lần check trước
- * Chỉ trả về các token có confluence tăng VÀ có ít nhất 1 timeframe lớn (4h, 8h, 1d) trong confluence hiện tại
+ * Trả về các token có confluence tăng VÀ thỏa một trong các điều kiện:
+ *   - Có ít nhất 1 timeframe lớn (4h, 8h, 1d) trong confluence hiện tại
+ *   - Có ít nhất 3 RSI quá bán (oversold) đối với pump alert
+ *   - Có ít nhất 3 RSI quá mua (overbought) đối với drop alert
  * @param {Array} currentTop10 - Top 10 hiện tại (có RSI data)
  * @param {Object} previousData - Dữ liệu top 10 trước đó (có thể null)
+ * @param {boolean} isPumpAlert - true nếu là pump alert, false nếu là drop alert
  * @returns {Array} Mảng các token có confluence tăng: [{ token, previousCount, currentCount, increase }]
  */
-export function detectRSIConfluenceIncrease(currentTop10, previousData) {
+export function detectRSIConfluenceIncrease(currentTop10, previousData, isPumpAlert = true) {
   // Lần chạy đầu tiên, không có dữ liệu để so sánh
   if (!previousData || !previousData.top10 || previousData.top10.length === 0) {
     return [];
@@ -183,8 +187,26 @@ export function detectRSIConfluenceIncrease(currentTop10, previousData) {
     const currentCount = currentConfluence.hasConfluence ? (currentConfluence.count || 0) : 0;
     const previousCount = previousConfluence.hasConfluence ? (previousConfluence.count || 0) : 0;
 
-    // Nếu confluence count tăng VÀ confluence hiện tại có ít nhất 1 timeframe lớn
-    if (currentCount > previousCount && hasLargeTimeframeInConfluence(currentConfluence)) {
+    // Kiểm tra nếu confluence count tăng
+    if (currentCount <= previousCount) {
+      return;
+    }
+
+    // Điều kiện 1: Có ít nhất 1 timeframe lớn trong confluence hiện tại
+    const hasLargeTF = hasLargeTimeframeInConfluence(currentConfluence);
+    
+    // Điều kiện 2: Có ít nhất 3 RSI quá bán/quá mua tùy theo loại alert
+    let hasMinRSI = false;
+    if (isPumpAlert) {
+      // Pump: cần ít nhất 3 RSI quá bán (oversold)
+      hasMinRSI = currentConfluence.status === 'oversold' && currentCount >= 3;
+    } else {
+      // Drop: cần ít nhất 3 RSI quá mua (overbought)
+      hasMinRSI = currentConfluence.status === 'overbought' && currentCount >= 3;
+    }
+
+    // Alert nếu thỏa một trong hai điều kiện
+    if (hasLargeTF || hasMinRSI) {
       increases.push({
         token: currentToken,
         previousCount,
@@ -203,10 +225,11 @@ export function detectRSIConfluenceIncrease(currentTop10, previousData) {
  * Lấy thông tin chi tiết về RSI confluence increase
  * @param {Array} currentTop10 - Top 10 hiện tại (có RSI data)
  * @param {Object} previousData - Dữ liệu top 10 trước đó
+ * @param {boolean} isPumpAlert - true nếu là pump alert, false nếu là drop alert
  * @returns {Object} Thông tin về confluence increase
  */
-export function getRSIConfluenceIncreaseInfo(currentTop10, previousData) {
-  const increases = detectRSIConfluenceIncrease(currentTop10, previousData);
+export function getRSIConfluenceIncreaseInfo(currentTop10, previousData, isPumpAlert = true) {
+  const increases = detectRSIConfluenceIncrease(currentTop10, previousData, isPumpAlert);
 
   return {
     hasIncrease: increases.length > 0,

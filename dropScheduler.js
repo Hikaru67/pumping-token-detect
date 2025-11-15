@@ -119,11 +119,12 @@ async function checkDropTokens() {
         newWhitelist = previousData.top1Whitelist || [];
       }
 
-      // Kiểm tra RSI confluence increase (chỉ trigger khi có ít nhất 1 timeframe lớn: 4h, 8h, 1d)
-      confluenceInfo = getRSIConfluenceIncreaseInfo(top10, previousData);
+      // Kiểm tra RSI confluence increase
+      // Trigger khi: có ít nhất 1 timeframe lớn (4h, 8h, 1d) HOẶC có ít nhất 3 RSI quá mua
+      confluenceInfo = getRSIConfluenceIncreaseInfo(top10, previousData, false); // false = drop alert
       
       if (confluenceInfo.hasIncrease) {
-        console.log(`\n📊 [DROP] Phát hiện RSI Confluence tăng cho ${confluenceInfo.count} token(s) (có ít nhất 1 timeframe lớn: 4h, 8h, 1d):`);
+        console.log(`\n📊 [DROP] Phát hiện RSI Confluence tăng cho ${confluenceInfo.count} token(s):`);
         
         confluenceInfo.increases.forEach(increase => {
           const statusEmoji = increase.currentConfluence.status === 'oversold' ? '🟢' : '🔴';
@@ -138,10 +139,14 @@ async function checkDropTokens() {
             ? ` [Timeframes lớn: ${largeTimeframes.join(', ')}]` 
             : '';
           
-          console.log(`   🚨 [DROP] ${increase.token.symbol}: ${statusText} Confluence tăng từ ${increase.previousCount} → ${increase.currentCount} TFs (${timeframesList})${largeTimeframesStr}`);
+          // Kiểm tra nếu có ít nhất 3 RSI quá mua
+          const hasMinOverbought = increase.currentConfluence.status === 'overbought' && increase.currentCount >= 3;
+          const minOverboughtStr = hasMinOverbought ? ' [≥3 RSI quá mua]' : '';
+          
+          console.log(`   🚨 [DROP] ${increase.token.symbol}: ${statusText} Confluence tăng từ ${increase.previousCount} → ${increase.currentCount} TFs (${timeframesList})${largeTimeframesStr}${minOverboughtStr}`);
         });
         
-        // Trigger alert khi có confluence increase với timeframe lớn
+        // Trigger alert khi có confluence increase thỏa điều kiện
         shouldSendAlert = true;
         if (alertReason) {
           alertReason += ' + RSI Confluence tăng';
@@ -149,7 +154,7 @@ async function checkDropTokens() {
           alertReason = 'RSI Confluence tăng';
         }
       } else {
-        console.log('✅ [DROP] Không có RSI Confluence tăng (hoặc không có timeframe lớn: 4h, 8h, 1d)');
+        console.log('✅ [DROP] Không có RSI Confluence tăng (hoặc không thỏa điều kiện: có timeframe lớn hoặc ≥3 RSI quá mua)');
       }
     }
 

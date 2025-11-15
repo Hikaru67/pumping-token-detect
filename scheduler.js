@@ -119,11 +119,12 @@ async function checkPumpTokens() {
         newWhitelist = previousData.top1Whitelist || [];
       }
 
-      // Kiểm tra RSI confluence increase (chỉ trigger khi có ít nhất 1 timeframe lớn: 4h, 8h, 1d)
-      confluenceInfo = getRSIConfluenceIncreaseInfo(top10, previousData);
+      // Kiểm tra RSI confluence increase
+      // Trigger khi: có ít nhất 1 timeframe lớn (4h, 8h, 1d) HOẶC có ít nhất 3 RSI quá bán
+      confluenceInfo = getRSIConfluenceIncreaseInfo(top10, previousData, true); // true = pump alert
       
       if (confluenceInfo.hasIncrease) {
-        console.log(`\n📊 Phát hiện RSI Confluence tăng cho ${confluenceInfo.count} token(s) (có ít nhất 1 timeframe lớn: 4h, 8h, 1d):`);
+        console.log(`\n📊 Phát hiện RSI Confluence tăng cho ${confluenceInfo.count} token(s):`);
         
         confluenceInfo.increases.forEach(increase => {
           const statusEmoji = increase.currentConfluence.status === 'oversold' ? '🟢' : '🔴';
@@ -138,10 +139,14 @@ async function checkPumpTokens() {
             ? ` [Timeframes lớn: ${largeTimeframes.join(', ')}]` 
             : '';
           
-          console.log(`   🚨 ${increase.token.symbol}: ${statusText} Confluence tăng từ ${increase.previousCount} → ${increase.currentCount} TFs (${timeframesList})${largeTimeframesStr}`);
+          // Kiểm tra nếu có ít nhất 3 RSI quá bán
+          const hasMinOversold = increase.currentConfluence.status === 'oversold' && increase.currentCount >= 3;
+          const minOversoldStr = hasMinOversold ? ' [≥3 RSI quá bán]' : '';
+          
+          console.log(`   🚨 ${increase.token.symbol}: ${statusText} Confluence tăng từ ${increase.previousCount} → ${increase.currentCount} TFs (${timeframesList})${largeTimeframesStr}${minOversoldStr}`);
         });
         
-        // Trigger alert khi có confluence increase với timeframe lớn
+        // Trigger alert khi có confluence increase thỏa điều kiện
         shouldSendAlert = true;
         if (alertReason) {
           alertReason += ' + RSI Confluence tăng';
@@ -149,7 +154,7 @@ async function checkPumpTokens() {
           alertReason = 'RSI Confluence tăng';
         }
       } else {
-        console.log('✅ Không có RSI Confluence tăng (hoặc không có timeframe lớn: 4h, 8h, 1d)');
+        console.log('✅ Không có RSI Confluence tăng (hoặc không thỏa điều kiện: có timeframe lớn hoặc ≥3 RSI quá bán)');
       }
     }
 
