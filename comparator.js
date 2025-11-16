@@ -195,13 +195,13 @@ export function detectRSIConfluenceIncrease(currentTop10, previousData, isPumpAl
     // Điều kiện 1: Có ít nhất 1 timeframe lớn trong confluence hiện tại
     const hasLargeTF = hasLargeTimeframeInConfluence(currentConfluence);
     
-    // Điều kiện 2: Có ít nhất 3 RSI quá bán/quá mua tùy theo loại alert
+    // Điều kiện 2: Có ít nhất 2 RSI quá bán/quá mua tùy theo loại alert
     let hasMinRSI = false;
     if (isPumpAlert) {
-      // Pump: cần ít nhất 3 RSI quá bán (oversold)
+      // Pump: cần ít nhất 2 RSI quá bán (oversold)
       hasMinRSI = currentConfluence.status === 'oversold' && currentCount >= 2;
     } else {
-      // Drop: cần ít nhất 3 RSI quá mua (overbought)
+      // Drop: cần ít nhất 2 RSI quá mua (overbought)
       hasMinRSI = currentConfluence.status === 'overbought' && currentCount >= 2;
     }
 

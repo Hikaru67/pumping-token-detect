@@ -330,6 +330,15 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
 }
 
 /**
+ * Kiểm tra topic ID có hợp lệ không
+ * @param {number|null|undefined} topicId - Topic ID
+ * @returns {boolean} true nếu topic ID hợp lệ
+ */
+function isValidTopicId(topicId) {
+  return topicId !== null && topicId !== undefined && !isNaN(topicId);
+}
+
+/**
  * Gửi message đến một chat/topic cụ thể
  * @param {string} chatId - Chat ID
  * @param {string} message - Message content
@@ -354,7 +363,7 @@ async function sendToTelegramChat(chatId, message, topicId = null, disableNotifi
     };
     
     // Thêm message_thread_id nếu có topic ID
-    if (topicId !== null && topicId !== undefined && !isNaN(topicId)) {
+    if (isValidTopicId(topicId)) {
       payload.message_thread_id = topicId;
     }
     
@@ -377,6 +386,58 @@ async function sendToTelegramChat(chatId, message, topicId = null, disableNotifi
   }
 }
 
+/**
+ * Gửi alert đến nhiều địa chỉ (channel và topic)
+ * @param {string} message - Message content
+ * @param {Object} options - Options object
+ * @param {string} options.channelId - Channel ID để gửi (optional)
+ * @param {string} options.topicChatId - Group ID để gửi vào topic (optional)
+ * @param {number|null} options.topicId - Topic ID (optional)
+ * @param {boolean} options.disableNotification - Silent mode
+ * @param {string} options.label - Label cho log (ví dụ: "Pump" hoặc "Drop")
+ * @returns {Promise<boolean>} true nếu ít nhất 1 nơi gửi thành công
+ */
+async function sendToMultipleDestinations(message, options) {
+  const { channelId, topicChatId, topicId, disableNotification, label = '' } = options;
+  
+  const hasChannel = channelId && channelId.trim() !== '';
+  const hasTopic = isValidTopicId(topicId) && topicChatId && topicChatId.trim() !== '';
+
+  if (!hasChannel && !hasTopic) {
+    return false;
+  }
+
+  let successCount = 0;
+
+  // Gửi vào channel (nếu có)
+  if (hasChannel) {
+    const success = await sendToTelegramChat(channelId, message, null, disableNotification);
+    if (success) {
+      successCount++;
+      const labelText = label ? `${label} ` : '';
+      console.log(`✅ Đã gửi thông báo ${labelText}Telegram vào channel: ${channelId}`);
+    } else {
+      const labelText = label ? `${label} ` : '';
+      console.error(`❌ Lỗi khi gửi ${labelText}vào channel: ${channelId}`);
+    }
+  }
+
+  // Gửi vào group topic (nếu có)
+  if (hasTopic) {
+    const success = await sendToTelegramChat(topicChatId, message, topicId, disableNotification);
+    if (success) {
+      successCount++;
+      const labelText = label ? `${label} ` : '';
+      console.log(`✅ Đã gửi thông báo ${labelText}Telegram vào topic ${topicId} trong group: ${topicChatId}`);
+    } else {
+      const labelText = label ? `${label} ` : '';
+      console.error(`❌ Lỗi khi gửi ${labelText}vào topic ${topicId} trong group: ${topicChatId}`);
+    }
+  }
+
+  return successCount > 0;
+}
+
 export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo = null, forceSilent = false) {
   if (!config.telegramBotToken) {
     console.warn('⚠️  Telegram Bot Token chưa được cấu hình, bỏ qua việc gửi thông báo');
@@ -392,10 +453,8 @@ export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo 
   // Xác định các địa chỉ gửi
   const channelId = config.telegramChannelId || config.telegramChatId; // Channel cũ (ưu tiên telegramChannelId nếu có)
   const topicChatId = config.telegramTopicChatId || config.telegramChatId; // Group để gửi vào topic
-  const hasChannel = channelId && channelId.trim() !== '';
-  const hasTopic = config.telegramTopicId !== null && config.telegramTopicId !== undefined && !isNaN(config.telegramTopicId) && topicChatId && topicChatId.trim() !== '';
 
-  if (!hasChannel && !hasTopic) {
+  if (!channelId && !topicChatId) {
     console.warn('⚠️  Chưa cấu hình Telegram Chat ID hoặc Topic, bỏ qua việc gửi thông báo');
     return false;
   }
@@ -404,35 +463,13 @@ export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo 
     const message = formatAlertMessage(top10, alertReason, confluenceInfo);
     const disableNotification = forceSilent ? true : config.telegramDisableNotification;
     
-    let successCount = 0;
-    let totalAttempts = 0;
-
-    // Gửi vào channel cũ (nếu có)
-    if (hasChannel) {
-      totalAttempts++;
-      const success = await sendToTelegramChat(channelId, message, null, disableNotification);
-      if (success) {
-        successCount++;
-        console.log(`✅ Đã gửi thông báo Telegram vào channel: ${channelId}`);
-      } else {
-        console.error(`❌ Lỗi khi gửi vào channel: ${channelId}`);
-      }
-    }
-
-    // Gửi vào group topic mới (nếu có)
-    if (hasTopic) {
-      totalAttempts++;
-      const success = await sendToTelegramChat(topicChatId, message, config.telegramTopicId, disableNotification);
-      if (success) {
-        successCount++;
-        console.log(`✅ Đã gửi thông báo Telegram vào topic ${config.telegramTopicId} trong group: ${topicChatId}`);
-      } else {
-        console.error(`❌ Lỗi khi gửi vào topic ${config.telegramTopicId} trong group: ${topicChatId}`);
-      }
-    }
-
-    // Trả về true nếu ít nhất 1 nơi gửi thành công
-    return successCount > 0;
+    return await sendToMultipleDestinations(message, {
+      channelId,
+      topicChatId,
+      topicId: config.telegramTopicId,
+      disableNotification,
+      label: 'Pump',
+    });
   } catch (error) {
     console.error('❌ Lỗi khi gửi Telegram:', error.message);
     if (error.stack) {
@@ -465,10 +502,8 @@ export async function sendTelegramDropAlert(top10, alertReason = '', confluenceI
   // Xác định các địa chỉ gửi cho drop
   const dropChannelId = config.telegramDropChannelId || config.telegramDropChatId; // Channel cũ (ưu tiên telegramDropChannelId nếu có)
   const dropTopicChatId = config.telegramDropTopicChatId || config.telegramDropChatId; // Group để gửi vào topic
-  const hasDropChannel = dropChannelId && dropChannelId.trim() !== '';
-  const hasDropTopic = config.telegramDropTopicId !== null && config.telegramDropTopicId !== undefined && !isNaN(config.telegramDropTopicId) && dropTopicChatId && dropTopicChatId.trim() !== '';
 
-  if (!hasDropChannel && !hasDropTopic) {
+  if (!dropChannelId && !dropTopicChatId) {
     console.warn('⚠️  Chưa cấu hình Telegram Drop Chat ID hoặc Topic, bỏ qua việc gửi thông báo drop');
     return false;
   }
@@ -477,35 +512,13 @@ export async function sendTelegramDropAlert(top10, alertReason = '', confluenceI
     const message = formatDropAlertMessage(top10, alertReason, confluenceInfo);
     const disableNotification = forceSilent ? true : config.telegramDropDisableNotification;
     
-    let successCount = 0;
-    let totalAttempts = 0;
-
-    // Gửi vào channel cũ (nếu có)
-    if (hasDropChannel) {
-      totalAttempts++;
-      const success = await sendToTelegramChat(dropChannelId, message, null, disableNotification);
-      if (success) {
-        successCount++;
-        console.log(`✅ Đã gửi thông báo Drop Telegram vào channel: ${dropChannelId}`);
-      } else {
-        console.error(`❌ Lỗi khi gửi Drop vào channel: ${dropChannelId}`);
-      }
-    }
-
-    // Gửi vào group topic mới (nếu có)
-    if (hasDropTopic) {
-      totalAttempts++;
-      const success = await sendToTelegramChat(dropTopicChatId, message, config.telegramDropTopicId, disableNotification);
-      if (success) {
-        successCount++;
-        console.log(`✅ Đã gửi thông báo Drop Telegram vào topic ${config.telegramDropTopicId} trong group: ${dropTopicChatId}`);
-      } else {
-        console.error(`❌ Lỗi khi gửi Drop vào topic ${config.telegramDropTopicId} trong group: ${dropTopicChatId}`);
-      }
-    }
-
-    // Trả về true nếu ít nhất 1 nơi gửi thành công
-    return successCount > 0;
+    return await sendToMultipleDestinations(message, {
+      channelId: dropChannelId,
+      topicChatId: dropTopicChatId,
+      topicId: config.telegramDropTopicId,
+      disableNotification,
+      label: 'Drop',
+    });
   } catch (error) {
     console.error('❌ Lỗi khi gửi Drop Telegram:', error.message);
     if (error.stack) {
