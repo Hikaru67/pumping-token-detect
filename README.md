@@ -57,8 +57,18 @@ TELEGRAM_BOT_TOKEN=your_bot_token_here
 # Telegram Chat ID (lấy từ @userinfobot)
 TELEGRAM_CHAT_ID=your_chat_id_here
 
+# Telegram Topic ID (optional - để gửi vào topic trong group)
+# Chỉ cần thiết nếu muốn gửi vào topic cụ thể trong group
+# Lấy topic ID bằng cách forward một message từ topic đó và kiểm tra message_thread_id
+# Để trống nếu không sử dụng topic (gửi vào channel hoặc group không có topic)
+TELEGRAM_TOPIC_ID=
+
 # Telegram Drop Chat ID (cho drop tokens, optional)
 TELEGRAM_DROP_CHAT_ID=your_drop_chat_id_here
+
+# Telegram Drop Topic ID (optional - để gửi vào topic trong group cho drop alerts)
+# Tương tự như TELEGRAM_TOPIC_ID nhưng cho drop alerts
+TELEGRAM_DROP_TOPIC_ID=
 
 # Silent mode - Gửi thông báo im lặng (không có âm thanh/thông báo)
 # Giá trị: true hoặc false (mặc định: false)
@@ -99,6 +109,20 @@ RSI_CONFLUENCE_MIN_TIMEFRAMES=2
    - Gửi bất kỳ tin nhắn nào cho bot này
    - Bot sẽ trả về Chat ID của bạn
    - Hoặc nếu muốn gửi vào channel/group, thêm bot vào channel/group và lấy Chat ID từ API
+   - Đối với group: chat_id sẽ là số âm (ví dụ: -1001234567890)
+
+3. **Lấy Topic ID (chỉ cần nếu gửi vào topic trong group):**
+   - Topic ID là `message_thread_id` trong Telegram API
+   - Cách 1: Sử dụng bot @RawDataBot
+     - Thêm bot vào group của bạn
+     - Forward một message từ topic cần lấy ID
+     - Bot sẽ hiển thị `message_thread_id` trong raw data
+   - Cách 2: Sử dụng Telegram Bot API
+     - Gửi một message vào topic
+     - Kiểm tra response từ API, tìm field `message_thread_id`
+   - Cách 3: Sử dụng webhook hoặc getUpdates
+     - Khi nhận được message từ topic, kiểm tra field `message_thread_id` trong response
+   - **Lưu ý:** Để trống `TELEGRAM_TOPIC_ID` nếu không sử dụng topic (gửi vào channel hoặc group không có topic)
 
 ## 🎯 Sử dụng
 

@@ -330,16 +330,56 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
 }
 
 /**
- * Gửi thông báo đến Telegram
- * @param {Array} top10 - Top 10 token
- * @param {string} alertReason - Lý do gửi alert (optional)
- * @param {Object} confluenceInfo - Thông tin RSI confluence increase (optional)
- * @param {boolean} forceSilent - Bắt buộc gửi ở chế độ im lặng (override config)
+ * Gửi message đến một chat/topic cụ thể
+ * @param {string} chatId - Chat ID
+ * @param {string} message - Message content
+ * @param {number|null} topicId - Topic ID (optional)
+ * @param {boolean} disableNotification - Silent mode
  * @returns {Promise<boolean>} true nếu gửi thành công
  */
+async function sendToTelegramChat(chatId, message, topicId = null, disableNotification = false) {
+  if (!config.telegramBotToken || !chatId) {
+    return false;
+  }
+
+  try {
+    const TELEGRAM_API_URL = `https://api.telegram.org/bot${config.telegramBotToken}`;
+    
+    const payload = {
+      chat_id: chatId,
+      text: message,
+      parse_mode: 'Markdown',
+      disable_web_page_preview: true,
+      disable_notification: disableNotification,
+    };
+    
+    // Thêm message_thread_id nếu có topic ID
+    if (topicId !== null && topicId !== undefined && !isNaN(topicId)) {
+      payload.message_thread_id = topicId;
+    }
+    
+    const response = await axios.post(
+      `${TELEGRAM_API_URL}/sendMessage`,
+      payload,
+      {
+        timeout: 10000,
+      }
+    );
+
+    return response.data.ok;
+  } catch (error) {
+    if (error.response) {
+      console.error('❌ Lỗi Telegram API:', JSON.stringify(error.response.data, null, 2));
+    } else {
+      console.error('❌ Lỗi khi gửi Telegram:', error.message);
+    }
+    return false;
+  }
+}
+
 export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo = null, forceSilent = false) {
-  if (!config.telegramBotToken || !config.telegramChatId) {
-    console.warn('⚠️  Telegram chưa được cấu hình, bỏ qua việc gửi thông báo');
+  if (!config.telegramBotToken) {
+    console.warn('⚠️  Telegram Bot Token chưa được cấu hình, bỏ qua việc gửi thông báo');
     return false;
   }
 
@@ -349,42 +389,54 @@ export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo 
     return false;
   }
 
+  // Xác định các địa chỉ gửi
+  const channelId = config.telegramChannelId || config.telegramChatId; // Channel cũ (ưu tiên telegramChannelId nếu có)
+  const topicChatId = config.telegramTopicChatId || config.telegramChatId; // Group để gửi vào topic
+  const hasChannel = channelId && channelId.trim() !== '';
+  const hasTopic = config.telegramTopicId !== null && config.telegramTopicId !== undefined && !isNaN(config.telegramTopicId) && topicChatId && topicChatId.trim() !== '';
+
+  if (!hasChannel && !hasTopic) {
+    console.warn('⚠️  Chưa cấu hình Telegram Chat ID hoặc Topic, bỏ qua việc gửi thông báo');
+    return false;
+  }
+
   try {
     const message = formatAlertMessage(top10, alertReason, confluenceInfo);
-    const TELEGRAM_API_URL = `https://api.telegram.org/bot${config.telegramBotToken}`;
-    
-    // Nếu forceSilent = true, luôn bật silent mode; ngược lại dùng config
     const disableNotification = forceSilent ? true : config.telegramDisableNotification;
     
-    const response = await axios.post(
-      `${TELEGRAM_API_URL}/sendMessage`,
-      {
-        chat_id: config.telegramChatId,
-        text: message,
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true,
-        disable_notification: disableNotification, // Silent mode (không có âm thanh/thông báo)
-      },
-      {
-        timeout: 10000,
-      }
-    );
+    let successCount = 0;
+    let totalAttempts = 0;
 
-    if (response.data.ok) {
-      console.log('✅ Đã gửi thông báo Telegram thành công');
-      return true;
-    } else {
-      console.error('❌ Lỗi khi gửi Telegram:', response.data.description);
-      return false;
-    }
-  } catch (error) {
-    if (error.response) {
-      console.error('❌ Lỗi Telegram API:', JSON.stringify(error.response.data, null, 2));
-    } else {
-      console.error('❌ Lỗi khi gửi Telegram:', error.message);
-      if (error.stack) {
-        console.error('Stack trace:', error.stack);
+    // Gửi vào channel cũ (nếu có)
+    if (hasChannel) {
+      totalAttempts++;
+      const success = await sendToTelegramChat(channelId, message, null, disableNotification);
+      if (success) {
+        successCount++;
+        console.log(`✅ Đã gửi thông báo Telegram vào channel: ${channelId}`);
+      } else {
+        console.error(`❌ Lỗi khi gửi vào channel: ${channelId}`);
       }
+    }
+
+    // Gửi vào group topic mới (nếu có)
+    if (hasTopic) {
+      totalAttempts++;
+      const success = await sendToTelegramChat(topicChatId, message, config.telegramTopicId, disableNotification);
+      if (success) {
+        successCount++;
+        console.log(`✅ Đã gửi thông báo Telegram vào topic ${config.telegramTopicId} trong group: ${topicChatId}`);
+      } else {
+        console.error(`❌ Lỗi khi gửi vào topic ${config.telegramTopicId} trong group: ${topicChatId}`);
+      }
+    }
+
+    // Trả về true nếu ít nhất 1 nơi gửi thành công
+    return successCount > 0;
+  } catch (error) {
+    console.error('❌ Lỗi khi gửi Telegram:', error.message);
+    if (error.stack) {
+      console.error('Stack trace:', error.stack);
     }
     return false;
   }
@@ -399,8 +451,8 @@ export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo 
  * @returns {Promise<boolean>} true nếu gửi thành công
  */
 export async function sendTelegramDropAlert(top10, alertReason = '', confluenceInfo = null, forceSilent = false) {
-  if (!config.telegramBotToken || !config.telegramDropChatId) {
-    console.warn('⚠️  Telegram Drop channel chưa được cấu hình, bỏ qua việc gửi thông báo drop');
+  if (!config.telegramBotToken) {
+    console.warn('⚠️  Telegram Bot Token chưa được cấu hình, bỏ qua việc gửi thông báo drop');
     return false;
   }
 
@@ -410,42 +462,54 @@ export async function sendTelegramDropAlert(top10, alertReason = '', confluenceI
     return false;
   }
 
+  // Xác định các địa chỉ gửi cho drop
+  const dropChannelId = config.telegramDropChannelId || config.telegramDropChatId; // Channel cũ (ưu tiên telegramDropChannelId nếu có)
+  const dropTopicChatId = config.telegramDropTopicChatId || config.telegramDropChatId; // Group để gửi vào topic
+  const hasDropChannel = dropChannelId && dropChannelId.trim() !== '';
+  const hasDropTopic = config.telegramDropTopicId !== null && config.telegramDropTopicId !== undefined && !isNaN(config.telegramDropTopicId) && dropTopicChatId && dropTopicChatId.trim() !== '';
+
+  if (!hasDropChannel && !hasDropTopic) {
+    console.warn('⚠️  Chưa cấu hình Telegram Drop Chat ID hoặc Topic, bỏ qua việc gửi thông báo drop');
+    return false;
+  }
+
   try {
     const message = formatDropAlertMessage(top10, alertReason, confluenceInfo);
-    const TELEGRAM_API_URL = `https://api.telegram.org/bot${config.telegramBotToken}`;
-    
-    // Nếu forceSilent = true, luôn bật silent mode; ngược lại dùng config
     const disableNotification = forceSilent ? true : config.telegramDropDisableNotification;
     
-    const response = await axios.post(
-      `${TELEGRAM_API_URL}/sendMessage`,
-      {
-        chat_id: config.telegramDropChatId,
-        text: message,
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true,
-        disable_notification: disableNotification, // Silent mode cho drop alerts (không có âm thanh/thông báo)
-      },
-      {
-        timeout: 10000,
-      }
-    );
+    let successCount = 0;
+    let totalAttempts = 0;
 
-    if (response.data.ok) {
-      console.log('✅ Đã gửi thông báo Drop Telegram thành công');
-      return true;
-    } else {
-      console.error('❌ Lỗi khi gửi Drop Telegram:', response.data.description);
-      return false;
-    }
-  } catch (error) {
-    if (error.response) {
-      console.error('❌ Lỗi Drop Telegram API:', JSON.stringify(error.response.data, null, 2));
-    } else {
-      console.error('❌ Lỗi khi gửi Drop Telegram:', error.message);
-      if (error.stack) {
-        console.error('Stack trace:', error.stack);
+    // Gửi vào channel cũ (nếu có)
+    if (hasDropChannel) {
+      totalAttempts++;
+      const success = await sendToTelegramChat(dropChannelId, message, null, disableNotification);
+      if (success) {
+        successCount++;
+        console.log(`✅ Đã gửi thông báo Drop Telegram vào channel: ${dropChannelId}`);
+      } else {
+        console.error(`❌ Lỗi khi gửi Drop vào channel: ${dropChannelId}`);
       }
+    }
+
+    // Gửi vào group topic mới (nếu có)
+    if (hasDropTopic) {
+      totalAttempts++;
+      const success = await sendToTelegramChat(dropTopicChatId, message, config.telegramDropTopicId, disableNotification);
+      if (success) {
+        successCount++;
+        console.log(`✅ Đã gửi thông báo Drop Telegram vào topic ${config.telegramDropTopicId} trong group: ${dropTopicChatId}`);
+      } else {
+        console.error(`❌ Lỗi khi gửi Drop vào topic ${config.telegramDropTopicId} trong group: ${dropTopicChatId}`);
+      }
+    }
+
+    // Trả về true nếu ít nhất 1 nơi gửi thành công
+    return successCount > 0;
+  } catch (error) {
+    console.error('❌ Lỗi khi gửi Drop Telegram:', error.message);
+    if (error.stack) {
+      console.error('Stack trace:', error.stack);
     }
     return false;
   }

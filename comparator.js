@@ -199,10 +199,10 @@ export function detectRSIConfluenceIncrease(currentTop10, previousData, isPumpAl
     let hasMinRSI = false;
     if (isPumpAlert) {
       // Pump: cần ít nhất 3 RSI quá bán (oversold)
-      hasMinRSI = currentConfluence.status === 'oversold' && currentCount >= 3;
+      hasMinRSI = currentConfluence.status === 'oversold' && currentCount >= 2;
     } else {
       // Drop: cần ít nhất 3 RSI quá mua (overbought)
-      hasMinRSI = currentConfluence.status === 'overbought' && currentCount >= 3;
+      hasMinRSI = currentConfluence.status === 'overbought' && currentCount >= 2;
     }
 
     // Alert nếu thỏa một trong hai điều kiện
