@@ -1,5 +1,5 @@
-import { startScheduler } from './scheduler.js';
-import { startDropScheduler } from './dropScheduler.js';
+import { startScheduler } from './src/schedulers/scheduler.js';
+import { startDropScheduler } from './src/schedulers/dropScheduler.js';
 
 // Xử lý lỗi không bắt được
 process.on('unhandledRejection', (reason, promise) => {

@@ -8,22 +8,23 @@ export const config = {
   
   // Telegram Bot - Pump Tokens
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
-  telegramChatId: process.env.TELEGRAM_CHAT_ID || '', // Channel/Group cũ (vẫn gửi vào đây)
-  telegramChannelId: process.env.TELEGRAM_CHANNEL_ID || '', // Channel cũ riêng (optional, nếu khác với telegramChatId)
+  telegramChatId: process.env.TELEGRAM_CHAT_ID || '', // Channel ID (channel riêng)
+  telegramGroupId: process.env.TELEGRAM_GROUP_ID || '', // Group ID (để gửi vào topic)
   telegramDisableNotification: process.env.TELEGRAM_DISABLE_NOTIFICATION === 'true', // Silent mode (không có âm thanh/thông báo)
   telegramTopicId: process.env.TELEGRAM_TOPIC_ID && process.env.TELEGRAM_TOPIC_ID.trim() !== '' 
     ? parseInt(process.env.TELEGRAM_TOPIC_ID, 10) 
     : null, // Topic ID trong group (message_thread_id)
-  telegramTopicChatId: process.env.TELEGRAM_TOPIC_CHAT_ID || '', // Group ID để gửi vào topic (optional, nếu khác với telegramChatId)
+  telegramSignalTopicId: process.env.TELEGRAM_SIGNAL_TOPIC_ID && process.env.TELEGRAM_SIGNAL_TOPIC_ID.trim() !== '' 
+    ? parseInt(process.env.TELEGRAM_SIGNAL_TOPIC_ID, 10) 
+    : null, // Topic ID cho signal alerts (tín hiệu đảo chiều)
   
   // Telegram Bot - Drop Tokens
-  telegramDropChatId: process.env.TELEGRAM_DROP_CHAT_ID || '', // Channel/Group cũ cho drop (vẫn gửi vào đây)
-  telegramDropChannelId: process.env.TELEGRAM_DROP_CHANNEL_ID || '', // Channel cũ riêng cho drop (optional, nếu khác với telegramDropChatId)
+  telegramDropChatId: process.env.TELEGRAM_DROP_CHAT_ID || '', // Channel ID cho drop (channel riêng)
+  telegramDropGroupId: process.env.TELEGRAM_DROP_GROUP_ID || '', // Group ID cho drop (để gửi vào topic)
   telegramDropDisableNotification: process.env.TELEGRAM_DROP_DISABLE_NOTIFICATION === 'true', // Silent mode cho drop alerts
   telegramDropTopicId: process.env.TELEGRAM_DROP_TOPIC_ID && process.env.TELEGRAM_DROP_TOPIC_ID.trim() !== '' 
     ? parseInt(process.env.TELEGRAM_DROP_TOPIC_ID, 10) 
     : null, // Topic ID trong group cho drop alerts (message_thread_id)
-  telegramDropTopicChatId: process.env.TELEGRAM_DROP_TOPIC_CHAT_ID || '', // Group ID để gửi vào topic cho drop (optional, nếu khác với telegramDropChatId)
   
   // Scheduler
   cronSchedule: process.env.CRON_SCHEDULE || '*/1 * * * *', // Mỗi 1 phút
@@ -63,9 +64,13 @@ export const config = {
 };
 
 // Validate required config
-if (!config.telegramBotToken || !config.telegramChatId) {
-  console.warn('⚠️  Cảnh báo: TELEGRAM_BOT_TOKEN và TELEGRAM_CHAT_ID chưa được cấu hình!');
-  console.warn('   Vui lòng tạo file .env và cấu hình các giá trị này.');
+if (!config.telegramBotToken) {
+  console.warn('⚠️  Cảnh báo: TELEGRAM_BOT_TOKEN chưa được cấu hình!');
+  console.warn('   Vui lòng tạo file .env và cấu hình giá trị này.');
+}
+if (!config.telegramChatId && !config.telegramGroupId) {
+  console.warn('⚠️  Cảnh báo: TELEGRAM_CHAT_ID (channel) hoặc TELEGRAM_GROUP_ID chưa được cấu hình!');
+  console.warn('   Vui lòng cấu hình ít nhất một trong hai giá trị này.');
 }
 
 if (!config.telegramDropChatId) {

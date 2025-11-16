@@ -1,5 +1,18 @@
 import axios from 'axios';
-import { config } from './config.js';
+import { config } from '../config.js';
+
+/**
+ * Chuyển đổi interval để gọi API (Hour1 -> Min60)
+ * @param {string} interval - Interval gốc (ví dụ: 'Hour1')
+ * @returns {string} Interval để gọi API (ví dụ: 'Min60')
+ */
+function convertIntervalForAPI(interval) {
+  // Chuyển Hour1 thành Min60 khi gọi API
+  if (interval === 'Hour1') {
+    return 'Min60';
+  }
+  return interval;
+}
 
 /**
  * Call MEXC Futures API để lấy dữ liệu kline/OHLCV
@@ -15,15 +28,18 @@ export async function fetchKlineData(symbol, interval, limit = 200) {
     // Response format: { success: true, data: { time: [...], open: [...], close: [...], high: [...], low: [...], vol: [...], amount: [...] } }
     const url = `https://contract.mexc.com/api/v1/contract/kline/${symbol}`;
     
+    // Chuyển đổi interval cho API (Hour1 -> Min60)
+    const apiInterval = convertIntervalForAPI(interval);
+    
     // Tính toán start time: lấy limit candles từ hiện tại về trước
     // Mỗi interval có duration khác nhau (15m = 900s, 1h = 3600s, etc.)
     const now = Math.floor(Date.now() / 1000);
-    const intervalSeconds = getIntervalSeconds(interval);
+    const intervalSeconds = getIntervalSeconds(interval); // Vẫn dùng interval gốc để tính toán
     const startTime = now - (limit * intervalSeconds);
     
     const response = await axios.get(url, {
       params: {
-        interval: interval,
+        interval: apiInterval, // Dùng apiInterval đã convert
         start: startTime,
         end: now,
       },

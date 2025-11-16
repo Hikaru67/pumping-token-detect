@@ -1,4 +1,4 @@
-import { config } from './config.js';
+import { config } from '../config.js';
 
 /**
  * Tính RSI (Relative Strength Index) từ dữ liệu giá đóng cửa

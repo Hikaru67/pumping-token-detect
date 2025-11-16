@@ -1,10 +1,12 @@
 import cron from 'node-cron';
-import { fetchTickerData } from './apiClient.js';
-import { getTop10PumpTokens, addRSIToTop10 } from './dataProcessor.js';
-import { saveTop10, loadTop10 } from './storage.js';
-import { detectTop1Change, getTop1ChangeInfo, updateTop1Whitelist, getBaseSymbol, getRSIConfluenceIncreaseInfo, isQuietHours } from './comparator.js';
-import { sendTelegramAlert } from './telegramBot.js';
-import { config } from './config.js';
+import { fetchTickerData } from '../api/apiClient.js';
+import { getTop10PumpTokens, addRSIToTop10 } from '../utils/dataProcessor.js';
+import { saveTop10, loadTop10 } from '../utils/storage.js';
+import { detectTop1Change, getTop1ChangeInfo, updateTop1Whitelist, getBaseSymbol, getRSIConfluenceIncreaseInfo, isQuietHours } from '../utils/comparator.js';
+import { getRSIStatus } from '../indicators/rsiCalculator.js';
+import { sendTelegramAlert, sendSignalAlert } from '../telegram/telegramBot.js';
+import { checkReversalSignal } from '../indicators/candlestickPattern.js';
+import { config } from '../config.js';
 
 let isRunning = false;
 
@@ -93,21 +95,12 @@ async function checkPumpTokens() {
           console.log(`   Top 1 trước: ${changeInfo.previousTop1 ? changeInfo.previousTop1.symbol : 'N/A'}`);
           console.log(`   Top 1 hiện tại: ${changeInfo.currentTop1 ? changeInfo.currentTop1.symbol : 'N/A'} (trong whitelist)`);
         } else {
-          const inQuietHours = isQuietHours();
-          if (inQuietHours) {
-            console.log('🌙 Phát hiện thay đổi ở top 1 (khung giờ im lặng 23h-1h - sẽ gửi im lặng)');
-          } else {
-            console.log('🚨 Phát hiện thay đổi ở top 1!');
-          }
+          console.log('🚨 Phát hiện thay đổi ở top 1!');
           console.log(`   Top 1 trước: ${changeInfo.previousTop1 ? changeInfo.previousTop1.symbol : 'N/A'}`);
           console.log(`   Top 1 hiện tại: ${changeInfo.currentTop1 ? changeInfo.currentTop1.symbol : 'N/A'}`);
           
           shouldSendAlert = true;
           alertReason = 'Top 1 thay đổi';
-          // Lưu flag để biết có cần gửi im lặng không
-          if (inQuietHours) {
-            alertReason += ' [Quiet Hours]';
-          }
         }
         
         // Cập nhật whitelist: thêm top 1 mới vào whitelist (chỉ giữ 3 gần nhất)
@@ -158,9 +151,11 @@ async function checkPumpTokens() {
       }
     }
 
+    // Xác định quiet hours mode (dùng cho cả alert thông thường và signal alert)
+    const isQuietHoursMode = isQuietHours();
+
     // Gửi alert nếu cần
     if (shouldSendAlert) {
-      const isQuietHoursMode = alertReason.includes('[Quiet Hours]');
       const cleanAlertReason = alertReason.replace(' [Quiet Hours]', '');
       
       if (isQuietHoursMode) {
@@ -176,7 +171,55 @@ async function checkPumpTokens() {
       console.log('✅ Không có thay đổi đáng kể, bỏ qua alert');
     }
 
-    // 6. Lưu top 10 mới (có RSI) và whitelist
+    // 6. Kiểm tra và gửi signal alert (tín hiệu đảo chiều)
+    if (config.telegramSignalTopicId && config.telegramGroupId) {
+      console.log('\n🔍 Đang kiểm tra tín hiệu đảo chiều...');
+      const signalTokens = [];
+      
+      for (const token of top10) {
+        // Kiểm tra token có ít nhất 1 RSI oversold
+        let hasOversoldRSI = false;
+        if (token.rsi && typeof token.rsi === 'object') {
+          for (const [tf, rsi] of Object.entries(token.rsi)) {
+            if (rsi !== null && !isNaN(rsi)) {
+              const status = getRSIStatus(rsi, tf);
+              if (status === 'oversold') {
+                hasOversoldRSI = true;
+                break;
+              }
+            }
+          }
+        }
+
+        if (!hasOversoldRSI) {
+          continue; // Không có RSI oversold, bỏ qua
+        }
+
+        // Kiểm tra tín hiệu đảo chiều từ nến
+        try {
+          const signalResult = await checkReversalSignal(token, ['Min5', 'Min15', 'Min30', 'Min60']);
+          if (signalResult.hasSignal && signalResult.timeframes.length > 0) {
+            signalTokens.push({
+              token,
+              signalTimeframes: signalResult.timeframes,
+            });
+            console.log(`   🚨 ${token.symbol}: Tín hiệu đảo chiều tại ${signalResult.timeframes.join(', ')}`);
+          }
+        } catch (error) {
+          console.warn(`   ⚠️  Lỗi khi kiểm tra signal cho ${token.symbol}:`, error.message);
+        }
+      }
+
+      // Gửi signal alert nếu có token thỏa điều kiện
+      if (signalTokens.length > 0) {
+        console.log(`\n📨 Gửi signal alert cho ${signalTokens.length} token(s) có tín hiệu đảo chiều`);
+        await sendSignalAlert(signalTokens, isQuietHoursMode);
+      } else {
+        console.log('✅ Không có token nào có tín hiệu đảo chiều');
+      }
+    }
+
+    // 7. Lưu top 10 mới (có RSI) và whitelist
     await saveTop10(top10, newWhitelist);
 
     const duration = Date.now() - startTime;

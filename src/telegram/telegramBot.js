@@ -1,6 +1,7 @@
 import axios from 'axios';
-import { config } from './config.js';
-import { formatTimeframe, getRSIStatus } from './rsiCalculator.js';
+import { config } from '../config.js';
+import { formatTimeframe, getRSIStatus } from '../indicators/rsiCalculator.js';
+import { checkReversalSignal } from '../indicators/candlestickPattern.js';
 
 /**
  * Bỏ đuôi _USDT hoặc _USDC trong symbol
@@ -330,6 +331,110 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
 }
 
 /**
+ * Format thông báo signal alert cho các token có tín hiệu đảo chiều
+ * @param {Array} signalTokens - Mảng các token có tín hiệu đảo chiều
+ * @returns {string} Message đã format
+ */
+function formatSignalAlertMessage(signalTokens) {
+  if (!Array.isArray(signalTokens) || signalTokens.length === 0) {
+    return '⚠️ Không có dữ liệu signal để hiển thị';
+  }
+
+  const timestamp = new Date().toLocaleString('vi-VN', { 
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
+  let message = '🔄 *🚨 TÍN HIỆU ĐẢO CHIỀU 🚨*\n\n';
+  
+  signalTokens.forEach((item, index) => {
+    const { token, signalTimeframes } = item;
+    const cleanSymbolName = escapeMarkdown(cleanSymbol(token.symbol));
+    const riseFallPercent = (token.riseFallRate * 100).toFixed(2);
+    const sign = token.riseFallRate >= 0 ? '+' : '';
+    
+    message += `*${index + 1}. $${cleanSymbolName}*\n`;
+    message += `   Biến động: *${sign}${riseFallPercent}%*\n`;
+    
+    // Hiển thị RSI oversold cho các timeframes có signal
+    const rsiStrings = signalTimeframes.map(tf => {
+      const rsi = token.rsi[tf];
+      if (rsi === null || rsi === undefined || isNaN(rsi)) return null;
+      const formattedTF = formatTimeframe(tf);
+      return `${formattedTF}🟢*${rsi.toFixed(1)}*`;
+    }).filter(Boolean);
+    
+    if (rsiStrings.length > 0) {
+      message += `   📊 RSI Oversold: ${rsiStrings.join(' • ')}\n`;
+    }
+    
+    // Hiển thị timeframes có signal
+    const tfList = signalTimeframes.map(tf => formatTimeframe(tf)).join(', ');
+    message += `   🔄 Tín hiệu đảo chiều: ${tfList}\n`;
+    
+    if (token.lastPrice > 0) {
+      message += `   Giá hiện tại: ${token.lastPrice}\n`;
+    }
+    
+    message += `   Volume 24h: ${formatNumber(token.volume24)}\n\n`;
+  });
+
+  message += `⏰ Thời gian: ${timestamp}`;
+
+  // Kiểm tra độ dài message (Telegram limit: 4096 characters)
+  if (message.length > 4096) {
+    console.warn('⚠️  Signal message quá dài, sẽ bị cắt bớt');
+    message = message.substring(0, 4090) + '...';
+  }
+
+  return message;
+}
+
+/**
+ * Gửi signal alert vào topic signal
+ * @param {Array} signalTokens - Mảng các token có tín hiệu đảo chiều
+ * @param {boolean} forceSilent - Bắt buộc gửi ở chế độ im lặng
+ * @returns {Promise<boolean>} true nếu gửi thành công
+ */
+export async function sendSignalAlert(signalTokens, forceSilent = false) {
+  if (!config.telegramBotToken || !config.telegramGroupId || !config.telegramSignalTopicId) {
+    return false;
+  }
+
+  if (!Array.isArray(signalTokens) || signalTokens.length === 0) {
+    return false;
+  }
+
+  try {
+    const message = formatSignalAlertMessage(signalTokens);
+    const disableNotification = forceSilent ? true : config.telegramDisableNotification;
+    
+    const success = await sendToTelegramChat(
+      config.telegramGroupId,
+      message,
+      config.telegramSignalTopicId,
+      disableNotification
+    );
+
+    if (success) {
+      console.log(`✅ Đã gửi signal alert vào topic ${config.telegramSignalTopicId} trong group: ${config.telegramGroupId}`);
+    } else {
+      console.error(`❌ Lỗi khi gửi signal alert vào topic ${config.telegramSignalTopicId}`);
+    }
+
+    return success;
+  } catch (error) {
+    console.error('❌ Lỗi khi gửi signal alert:', error.message);
+    return false;
+  }
+}
+
+/**
  * Kiểm tra topic ID có hợp lệ không
  * @param {number|null|undefined} topicId - Topic ID
  * @returns {boolean} true nếu topic ID hợp lệ
@@ -451,11 +556,11 @@ export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo 
   }
 
   // Xác định các địa chỉ gửi
-  const channelId = config.telegramChannelId || config.telegramChatId; // Channel cũ (ưu tiên telegramChannelId nếu có)
-  const topicChatId = config.telegramTopicChatId || config.telegramChatId; // Group để gửi vào topic
+  const channelId = config.telegramChatId; // Channel ID (channel riêng)
+  const groupId = config.telegramGroupId; // Group ID (để gửi vào topic)
 
-  if (!channelId && !topicChatId) {
-    console.warn('⚠️  Chưa cấu hình Telegram Chat ID hoặc Topic, bỏ qua việc gửi thông báo');
+  if (!channelId && !groupId) {
+    console.warn('⚠️  Chưa cấu hình Telegram Chat ID (channel) hoặc Group ID, bỏ qua việc gửi thông báo');
     return false;
   }
 
@@ -465,7 +570,7 @@ export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo 
     
     return await sendToMultipleDestinations(message, {
       channelId,
-      topicChatId,
+      topicChatId: groupId,
       topicId: config.telegramTopicId,
       disableNotification,
       label: 'Pump',
@@ -500,11 +605,11 @@ export async function sendTelegramDropAlert(top10, alertReason = '', confluenceI
   }
 
   // Xác định các địa chỉ gửi cho drop
-  const dropChannelId = config.telegramDropChannelId || config.telegramDropChatId; // Channel cũ (ưu tiên telegramDropChannelId nếu có)
-  const dropTopicChatId = config.telegramDropTopicChatId || config.telegramDropChatId; // Group để gửi vào topic
+  const dropChannelId = config.telegramDropChatId; // Channel ID cho drop (channel riêng)
+  const dropGroupId = config.telegramDropGroupId; // Group ID cho drop (để gửi vào topic)
 
-  if (!dropChannelId && !dropTopicChatId) {
-    console.warn('⚠️  Chưa cấu hình Telegram Drop Chat ID hoặc Topic, bỏ qua việc gửi thông báo drop');
+  if (!dropChannelId && !dropGroupId) {
+    console.warn('⚠️  Chưa cấu hình Telegram Drop Chat ID (channel) hoặc Group ID, bỏ qua việc gửi thông báo drop');
     return false;
   }
 
@@ -514,7 +619,7 @@ export async function sendTelegramDropAlert(top10, alertReason = '', confluenceI
     
     return await sendToMultipleDestinations(message, {
       channelId: dropChannelId,
-      topicChatId: dropTopicChatId,
+      topicChatId: dropGroupId,
       topicId: config.telegramDropTopicId,
       disableNotification,
       label: 'Drop',

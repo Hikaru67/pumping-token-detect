@@ -54,8 +54,12 @@ Chỉnh sửa file `.env` và điền các thông tin:
 # Telegram Bot Token (lấy từ @BotFather)
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 
-# Telegram Chat ID (lấy từ @userinfobot)
-TELEGRAM_CHAT_ID=your_chat_id_here
+# Telegram Chat ID - Channel ID (channel riêng để gửi alert)
+TELEGRAM_CHAT_ID=your_channel_id_here
+
+# Telegram Group ID (group để gửi vào topic, optional)
+# Chỉ cần thiết nếu muốn gửi vào topic trong group
+TELEGRAM_GROUP_ID=your_group_id_here
 
 # Telegram Topic ID (optional - để gửi vào topic trong group)
 # Chỉ cần thiết nếu muốn gửi vào topic cụ thể trong group
@@ -63,8 +67,16 @@ TELEGRAM_CHAT_ID=your_chat_id_here
 # Để trống nếu không sử dụng topic (gửi vào channel hoặc group không có topic)
 TELEGRAM_TOPIC_ID=
 
-# Telegram Drop Chat ID (cho drop tokens, optional)
-TELEGRAM_DROP_CHAT_ID=your_drop_chat_id_here
+# Telegram Signal Topic ID (optional - để gửi signal alerts vào topic khác)
+# Topic ID cho các token có tín hiệu đảo chiều (RSI oversold + candlestick reversal pattern)
+# Sẽ gửi vào topic này trong cùng group (TELEGRAM_GROUP_ID) khi phát hiện tín hiệu đảo chiều
+TELEGRAM_SIGNAL_TOPIC_ID=
+
+# Telegram Drop Chat ID - Channel ID cho drop tokens (optional)
+TELEGRAM_DROP_CHAT_ID=your_drop_channel_id_here
+
+# Telegram Drop Group ID (group để gửi vào topic cho drop alerts, optional)
+TELEGRAM_DROP_GROUP_ID=your_drop_group_id_here
 
 # Telegram Drop Topic ID (optional - để gửi vào topic trong group cho drop alerts)
 # Tương tự như TELEGRAM_TOPIC_ID nhưng cho drop alerts
@@ -123,6 +135,31 @@ RSI_CONFLUENCE_MIN_TIMEFRAMES=2
    - Cách 3: Sử dụng webhook hoặc getUpdates
      - Khi nhận được message từ topic, kiểm tra field `message_thread_id` trong response
    - **Lưu ý:** Để trống `TELEGRAM_TOPIC_ID` nếu không sử dụng topic (gửi vào channel hoặc group không có topic)
+
+## 📁 Cấu trúc Project
+
+```
+pump-token-alert/
+├── src/
+│   ├── api/              # API clients
+│   │   └── apiClient.js  # MEXC API client
+│   ├── telegram/         # Telegram bot
+│   │   └── telegramBot.js
+│   ├── indicators/       # Technical indicators
+│   │   ├── rsiCalculator.js
+│   │   └── candlestickPattern.js
+│   ├── utils/            # Utilities
+│   │   ├── comparator.js
+│   │   ├── dataProcessor.js
+│   │   └── storage.js
+│   ├── schedulers/       # Schedulers
+│   │   ├── scheduler.js
+│   │   └── dropScheduler.js
+│   └── config.js         # Configuration
+├── main.js               # Entry point
+├── package.json
+└── .env                  # Environment variables
+```
 
 ## 🎯 Sử dụng
 

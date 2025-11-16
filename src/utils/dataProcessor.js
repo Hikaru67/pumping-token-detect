@@ -1,6 +1,6 @@
-import { fetchKlineData } from './apiClient.js';
-import { calculateRSI, checkRSIConfluence, formatTimeframe, getRSIStatus } from './rsiCalculator.js';
-import { config } from './config.js';
+import { fetchKlineData } from '../api/apiClient.js';
+import { calculateRSI, checkRSIConfluence, formatTimeframe, getRSIStatus } from '../indicators/rsiCalculator.js';
+import { config } from '../config.js';
 
 /**
  * Bỏ đuôi _USDT hoặc _USDC trong symbol để so sánh
