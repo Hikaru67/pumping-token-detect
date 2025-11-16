@@ -54,7 +54,7 @@ export function calculateRSI(closes, period = config.rsiPeriod) {
 function isSmallTimeframe(timeframe) {
   if (!timeframe) return false;
   // Khung bé: Min1, Min5, Min15, Min30
-  return timeframe.startsWith('Min');
+  return timeframe.startsWith('Min') && timeframe !== 'Min60';
 }
 
 /**
