@@ -472,7 +472,7 @@ function formatSingleSignalMessage(token, signalTimeframes) {
   
   if (token.riseFallRate !== undefined) {
     const sign = token.riseFallRate >= 0 ? '+' : '';
-    const percent = Math.abs(token.riseFallRate).toFixed(2);
+    const percent = Math.abs(token.riseFallRate * 100).toFixed(2);
     message += `📈 Biến động 24h: ${sign}${percent}%\n`;
   }
   

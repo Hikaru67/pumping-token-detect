@@ -127,9 +127,13 @@ export async function checkReversalSignal(token, timeframes = ['Min5', 'Min15', 
       }
 
       // Tạo mảng candles từ kline data
+      // Bỏ nến cuối cùng (nến đang chạy/chưa đóng cửa) - chỉ dùng nến đã đóng
       const candles = [];
       const length = klineData.close.length;
-      for (let i = 0; i < length; i++) {
+      // Chỉ lấy từ nến đầu tiên đến nến áp chót (bỏ nến cuối cùng)
+      const closedCandlesCount = length > 1 ? length - 1 : length;
+      
+      for (let i = 0; i < closedCandlesCount; i++) {
         candles.push({
           open: klineData.open[i],
           close: klineData.close[i],
@@ -138,8 +142,8 @@ export async function checkReversalSignal(token, timeframes = ['Min5', 'Min15', 
         });
       }
 
-      // Kiểm tra tín hiệu đảo chiều
-      if (hasReversalSignal(candles)) {
+      // Kiểm tra tín hiệu đảo chiều (chỉ dùng nến đã đóng)
+      if (candles.length >= 2 && hasReversalSignal(candles)) {
         signalTimeframes.push(timeframe);
       }
 
