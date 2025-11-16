@@ -396,7 +396,99 @@ function formatSignalAlertMessage(signalTokens) {
 }
 
 /**
- * Gửi signal alert vào topic signal
+ * Format message cho một token có signal
+ * @param {Object} token - Token object
+ * @param {Array<string>} signalTimeframes - Các timeframes có signal
+ * @returns {string} Formatted message
+ */
+function formatSingleSignalMessage(token, signalTimeframes) {
+  if (!token || !token.symbol) {
+    return '';
+  }
+
+  const cleanSymbolName = removeUSDTUSDC(token.symbol);
+  const timestamp = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+  
+  let message = `🚨 *Signal Đảo Chiều*\n\n`;
+  message += `*$${cleanSymbolName}*\n`;
+  
+  // Hiển thị RSI oversold cho các timeframes có signal
+  const rsiStrings = signalTimeframes.map(tf => {
+    const rsi = token.rsi && token.rsi[tf];
+    if (rsi === null || rsi === undefined || isNaN(rsi)) return null;
+    const formattedTF = formatTimeframe(tf);
+    return `${formattedTF}🟢*${rsi.toFixed(1)}*`;
+  }).filter(Boolean);
+  
+  if (rsiStrings.length > 0) {
+    message += `📊 RSI Oversold: ${rsiStrings.join(' • ')}\n`;
+  }
+  
+  // Hiển thị timeframes có signal
+  const tfList = signalTimeframes.map(tf => formatTimeframe(tf)).join(', ');
+  message += `🔄 Tín hiệu đảo chiều: ${tfList}\n`;
+  
+  if (token.lastPrice > 0) {
+    message += `💰 Giá: ${token.lastPrice}\n`;
+  }
+  
+  if (token.riseFallRate !== undefined) {
+    const sign = token.riseFallRate >= 0 ? '+' : '';
+    const percent = Math.abs(token.riseFallRate).toFixed(2);
+    message += `📈 24h: ${sign}${percent}%\n`;
+  }
+  
+  if (token.volume24) {
+    message += `📊 Volume 24h: ${formatNumber(token.volume24)}\n`;
+  }
+  
+  message += `\n⏰ ${timestamp}`;
+  
+  return message;
+}
+
+/**
+ * Gửi signal alert cho một token riêng lẻ (gửi ngay khi phát hiện)
+ * @param {Object} token - Token object có tín hiệu đảo chiều
+ * @param {Array<string>} signalTimeframes - Các timeframes có signal
+ * @param {boolean} forceSilent - Bắt buộc gửi ở chế độ im lặng
+ * @returns {Promise<boolean>} true nếu gửi thành công
+ */
+export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent = false) {
+  if (!config.telegramBotToken || !config.telegramGroupId || !config.telegramSignalTopicId) {
+    return false;
+  }
+
+  if (!token || !signalTimeframes || signalTimeframes.length === 0) {
+    return false;
+  }
+
+  try {
+    const message = formatSingleSignalMessage(token, signalTimeframes);
+    const disableNotification = forceSilent ? true : config.telegramDisableNotification;
+    
+    const success = await sendToTelegramChat(
+      config.telegramGroupId,
+      message,
+      config.telegramSignalTopicId,
+      disableNotification
+    );
+
+    if (success) {
+      console.log(`✅ Đã gửi signal alert cho ${token.symbol} vào topic ${config.telegramSignalTopicId}`);
+    } else {
+      console.error(`❌ Lỗi khi gửi signal alert cho ${token.symbol}`);
+    }
+
+    return success;
+  } catch (error) {
+    console.error(`❌ Lỗi khi gửi signal alert cho ${token.symbol}:`, error.message);
+    return false;
+  }
+}
+
+/**
+ * Gửi signal alert vào topic signal (batch - nhiều token cùng lúc)
  * @param {Array} signalTokens - Mảng các token có tín hiệu đảo chiều
  * @param {boolean} forceSilent - Bắt buộc gửi ở chế độ im lặng
  * @returns {Promise<boolean>} true nếu gửi thành công
@@ -422,14 +514,14 @@ export async function sendSignalAlert(signalTokens, forceSilent = false) {
     );
 
     if (success) {
-      console.log(`✅ Đã gửi signal alert vào topic ${config.telegramSignalTopicId} trong group: ${config.telegramGroupId}`);
+      console.log(`✅ Đã gửi signal alert (batch) cho ${signalTokens.length} token(s) vào topic ${config.telegramSignalTopicId}`);
     } else {
-      console.error(`❌ Lỗi khi gửi signal alert vào topic ${config.telegramSignalTopicId}`);
+      console.error(`❌ Lỗi khi gửi signal alert (batch) vào topic ${config.telegramSignalTopicId}`);
     }
 
     return success;
   } catch (error) {
-    console.error('❌ Lỗi khi gửi signal alert:', error.message);
+    console.error('❌ Lỗi khi gửi signal alert (batch):', error.message);
     return false;
   }
 }

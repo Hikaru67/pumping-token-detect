@@ -4,7 +4,7 @@ import { getTop10PumpTokens, addRSIToTop10 } from '../utils/dataProcessor.js';
 import { saveTop10, loadTop10 } from '../utils/storage.js';
 import { detectTop1Change, getTop1ChangeInfo, updateTop1Whitelist, getBaseSymbol, getRSIConfluenceIncreaseInfo, isQuietHours } from '../utils/comparator.js';
 import { getRSIStatus } from '../indicators/rsiCalculator.js';
-import { sendTelegramAlert, sendSignalAlert } from '../telegram/telegramBot.js';
+import { sendTelegramAlert, sendSingleSignalAlert } from '../telegram/telegramBot.js';
 import { checkReversalSignal } from '../indicators/candlestickPattern.js';
 import { config } from '../config.js';
 
@@ -47,9 +47,74 @@ async function checkPumpTokens() {
       console.log(`   ${token.rank}. ${token.symbol} - ${sign}${percent}%`);
     });
 
-    // 3. Tính RSI cho top 10 tokens
+    // Xác định quiet hours mode (dùng cho cả alert thông thường và signal alert)
+    const isQuietHoursMode = isQuietHours();
+
+    // 3. Tính RSI cho top 10 tokens và check signal alert ngay khi tính xong mỗi token
     console.log('\n📊 Đang tính RSI cho top 10 tokens...');
-    const top10 = await addRSIToTop10(top10WithoutRSI, true); // true = pump alert
+    
+    // Callback để check và gửi signal alert ngay khi tính RSI xong cho mỗi token
+    const onTokenRSIComplete = async (tokenWithRSI, index) => {
+      // Chỉ check signal alert nếu có config
+      if (!config.telegramSignalTopicId || !config.telegramGroupId) {
+        return;
+      }
+
+      // Bỏ qua nếu token không có RSI data (có lỗi khi tính RSI)
+      if (!tokenWithRSI.rsi || typeof tokenWithRSI.rsi !== 'object' || Object.keys(tokenWithRSI.rsi).length === 0) {
+        return;
+      }
+
+      try {
+        // Kiểm tra token có ít nhất 1 RSI oversold ở bất kỳ timeframe nào
+        let hasOversoldRSI = false;
+        if (tokenWithRSI.rsi && typeof tokenWithRSI.rsi === 'object') {
+          for (const [tf, rsi] of Object.entries(tokenWithRSI.rsi)) {
+            if (rsi !== null && !isNaN(rsi)) {
+              const status = getRSIStatus(rsi, tf);
+              if (status === 'oversold') {
+                hasOversoldRSI = true;
+                break; // Chỉ cần tìm thấy 1 RSI oversold là đủ
+              }
+            }
+          }
+        }
+
+        if (!hasOversoldRSI) {
+          return; // Không có RSI oversold ở bất kỳ timeframe nào, bỏ qua
+        }
+
+        // Tìm các timeframes có RSI oversold trong các timeframe cần check nến (Min5, Min15, Min30, Min60)
+        const targetTimeframes = ['Min5', 'Min15', 'Min30', 'Min60'];
+        const oversoldTimeframes = [];
+        
+        for (const tf of targetTimeframes) {
+          const rsi = tokenWithRSI.rsi[tf];
+          if (rsi !== null && !isNaN(rsi)) {
+            const status = getRSIStatus(rsi, tf);
+            if (status === 'oversold') {
+              oversoldTimeframes.push(tf);
+            }
+          }
+        }
+
+        // Kiểm tra tín hiệu đảo chiều từ nến (chỉ check các timeframe có RSI oversold trong Min5, Min15, Min30, Min60)
+        const signalResult = await checkReversalSignal(tokenWithRSI, oversoldTimeframes.length > 0 ? oversoldTimeframes : targetTimeframes);
+        if (signalResult.hasSignal && signalResult.timeframes.length > 0) {
+          console.log(`   🚨 ${tokenWithRSI.symbol}: Tín hiệu đảo chiều tại ${signalResult.timeframes.join(', ')}`);
+          
+          // Gửi ngay khi phát hiện signal
+          const sendSuccess = await sendSingleSignalAlert(tokenWithRSI, signalResult.timeframes, isQuietHoursMode);
+          if (sendSuccess) {
+            console.log(`   ✅ Đã gửi signal alert cho ${tokenWithRSI.symbol}`);
+          }
+        }
+      } catch (error) {
+        console.warn(`   ⚠️  Lỗi khi kiểm tra signal cho ${tokenWithRSI.symbol}:`, error.message);
+      }
+    };
+    
+    const top10 = await addRSIToTop10(top10WithoutRSI, true, onTokenRSIComplete); // true = pump alert
     
     // Log RSI confluence nếu có
     top10.forEach(token => {
@@ -151,73 +216,22 @@ async function checkPumpTokens() {
       }
     }
 
-    // Xác định quiet hours mode (dùng cho cả alert thông thường và signal alert)
-    const isQuietHoursMode = isQuietHours();
-
-    // Gửi alert nếu cần
+    // 6. Gửi alert thông thường nếu cần
     if (shouldSendAlert) {
-      const cleanAlertReason = alertReason.replace(' [Quiet Hours]', '');
-      
       if (isQuietHoursMode) {
-        console.log(`\n📨 Gửi alert Telegram im lặng (Lý do: ${cleanAlertReason}) - Khung giờ 23h-1h`);
+        console.log(`\n📨 Gửi alert Telegram im lặng (Lý do: ${alertReason}) - Khung giờ 23h-1h`);
       } else {
-        console.log(`\n📨 Gửi alert Telegram (Lý do: ${cleanAlertReason})`);
+        console.log(`\n📨 Gửi alert Telegram (Lý do: ${alertReason})`);
       }
       
       // Chỉ truyền confluenceInfo nếu alertReason có chứa "RSI Confluence tăng"
-      const infoToSend = cleanAlertReason.includes('RSI Confluence tăng') ? confluenceInfo : null;
-      await sendTelegramAlert(top10, cleanAlertReason, infoToSend, isQuietHoursMode);
+      const infoToSend = alertReason.includes('RSI Confluence tăng') ? confluenceInfo : null;
+      await sendTelegramAlert(top10, alertReason, infoToSend, isQuietHoursMode);
     } else {
       console.log('✅ Không có thay đổi đáng kể, bỏ qua alert');
     }
 
-    // 6. Kiểm tra và gửi signal alert (tín hiệu đảo chiều)
-    if (config.telegramSignalTopicId && config.telegramGroupId) {
-      console.log('\n🔍 Đang kiểm tra tín hiệu đảo chiều...');
-      const signalTokens = [];
-      
-      for (const token of top10) {
-        // Kiểm tra token có ít nhất 1 RSI oversold
-        let hasOversoldRSI = false;
-        if (token.rsi && typeof token.rsi === 'object') {
-          for (const [tf, rsi] of Object.entries(token.rsi)) {
-            if (rsi !== null && !isNaN(rsi)) {
-              const status = getRSIStatus(rsi, tf);
-              if (status === 'oversold') {
-                hasOversoldRSI = true;
-                break;
-              }
-            }
-          }
-        }
-
-        if (!hasOversoldRSI) {
-          continue; // Không có RSI oversold, bỏ qua
-        }
-
-        // Kiểm tra tín hiệu đảo chiều từ nến
-        try {
-          const signalResult = await checkReversalSignal(token, ['Min5', 'Min15', 'Min30', 'Min60']);
-          if (signalResult.hasSignal && signalResult.timeframes.length > 0) {
-            signalTokens.push({
-              token,
-              signalTimeframes: signalResult.timeframes,
-            });
-            console.log(`   🚨 ${token.symbol}: Tín hiệu đảo chiều tại ${signalResult.timeframes.join(', ')}`);
-          }
-        } catch (error) {
-          console.warn(`   ⚠️  Lỗi khi kiểm tra signal cho ${token.symbol}:`, error.message);
-        }
-      }
-
-      // Gửi signal alert nếu có token thỏa điều kiện
-      if (signalTokens.length > 0) {
-        console.log(`\n📨 Gửi signal alert cho ${signalTokens.length} token(s) có tín hiệu đảo chiều`);
-        await sendSignalAlert(signalTokens, isQuietHoursMode);
-      } else {
-        console.log('✅ Không có token nào có tín hiệu đảo chiều');
-      }
-    }
+    // Lưu ý: Signal alert đã được gửi ngay trong callback onTokenRSIComplete khi tính RSI xong mỗi token
 
     // 7. Lưu top 10 mới (có RSI) và whitelist
     await saveTop10(top10, newWhitelist);

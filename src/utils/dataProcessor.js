@@ -36,12 +36,7 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Tính RSI cho một token với nhiều timeframes
- * @param {string} symbol - Symbol của token
- * @param {Array<string>} timeframes - Mảng các timeframes cần tính RSI
- * @returns {Promise<Object>} Object chứa RSI của các timeframes và confluence info
- */
+
 async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
   const rsiData = {};
   const errors = [];
@@ -322,12 +317,45 @@ function sortTop10ByRSI(top10, isPump = true) {
 }
 
 /**
- * Tính RSI cho top 10 tokens
+ * Tính RSI cho một token (wrapper function)
+ * @param {Object} token - Token object
+ * @returns {Promise<Object>} Token với RSI data
+ */
+async function calculateRSIForTokenWrapper(token) {
+  try {
+    console.log(`🔍 Đang tính RSI cho ${token.symbol}...`);
+    const rsiInfo = await calculateRSIForToken(token.symbol, config.rsiTimeframes);
+    
+    return {
+      ...token,
+      rsi: rsiInfo.rsiData,
+      rsiConfluence: rsiInfo.confluence,
+      rsiErrors: rsiInfo.errors,
+    };
+  } catch (error) {
+    console.error(`❌ Lỗi khi tính RSI cho ${token.symbol}: ${error.message}`);
+    return {
+      ...token,
+      rsi: {},
+      rsiConfluence: {
+        hasConfluence: false,
+        status: 'neutral',
+        timeframes: [],
+        count: 0,
+      },
+      rsiErrors: [{ error: error.message }],
+    };
+  }
+}
+
+/**
+ * Tính RSI cho top 10 tokens (song song để tăng tốc)
  * @param {Array} top10 - Top 10 tokens (chưa có RSI)
  * @param {boolean} isPump - true nếu là pump alert, false nếu là drop alert (mặc định: true)
+ * @param {Function} onTokenRSIComplete - Callback được gọi sau khi tính RSI xong cho mỗi token (async)
  * @returns {Promise<Array>} Top 10 tokens với RSI đã được tính và sắp xếp lại
  */
-export async function addRSIToTop10(top10, isPump = true) {
+export async function addRSIToTop10(top10, isPump = true, onTokenRSIComplete = null) {
   if (!Array.isArray(top10) || top10.length === 0) {
     return top10;
   }
@@ -344,12 +372,23 @@ export async function addRSIToTop10(top10, isPump = true) {
       console.log(`\n🔍 Đang tính RSI cho ${token.symbol} (${i + 1}/${top10.length})...`);
       const rsiInfo = await calculateRSIForToken(token.symbol, config.rsiTimeframes);
       
-      top10WithRSI.push({
+      const tokenWithRSI = {
         ...token,
         rsi: rsiInfo.rsiData,
         rsiConfluence: rsiInfo.confluence,
         rsiErrors: rsiInfo.errors,
-      });
+      };
+      
+      top10WithRSI.push(tokenWithRSI);
+      
+      // Gọi callback nếu có (để check và gửi signal alert ngay)
+      if (onTokenRSIComplete && typeof onTokenRSIComplete === 'function') {
+        try {
+          await onTokenRSIComplete(tokenWithRSI, i);
+        } catch (callbackError) {
+          console.warn(`⚠️  Lỗi trong callback onTokenRSIComplete cho ${token.symbol}:`, callbackError.message);
+        }
+      }
       
       // Delay nhỏ giữa các token để tránh rate limit
       if (i < top10.length - 1) {
@@ -357,7 +396,7 @@ export async function addRSIToTop10(top10, isPump = true) {
       }
     } catch (error) {
       console.error(`❌ Lỗi khi tính RSI cho ${token.symbol}: ${error.message}`);
-      top10WithRSI.push({
+      const tokenWithError = {
         ...token,
         rsi: {},
         rsiConfluence: {
@@ -367,7 +406,12 @@ export async function addRSIToTop10(top10, isPump = true) {
           count: 0,
         },
         rsiErrors: [{ error: error.message }],
-      });
+      };
+      
+      top10WithRSI.push(tokenWithError);
+      
+      // Không gọi callback cho token có lỗi (vì không có RSI data để check signal)
+      // Callback sẽ tự check và bỏ qua nếu không có RSI data
       
       // Delay ngay cả khi có lỗi
       if (i < top10.length - 1) {

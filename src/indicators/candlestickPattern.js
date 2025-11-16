@@ -97,32 +97,28 @@ function hasReversalSignal(candles) {
 }
 
 /**
- * Kiểm tra token có tín hiệu đảo chiều và RSI oversold
+ * Kiểm tra token có tín hiệu đảo chiều từ candlestick pattern
  * @param {Object} token - Token object có RSI data
- * @param {Array<string>} timeframes - Các timeframes cần kiểm tra (m5, m15, m30, m60)
+ * @param {Array<string>} timeframes - Các timeframes cần kiểm tra (đã được filter RSI oversold trước đó)
  * @returns {Promise<Object>} { hasSignal: boolean, timeframes: Array<string> }
+ * 
+ * Lưu ý: Hàm này giả định các timeframes đã được filter để chỉ có RSI oversold.
+ * Hàm sẽ chỉ check candlestick pattern, không check lại RSI oversold.
  */
 export async function checkReversalSignal(token, timeframes = ['Min5', 'Min15', 'Min30', 'Min60']) {
   if (!token || !token.symbol || !token.rsi) {
     return { hasSignal: false, timeframes: [] };
   }
 
+  if (!Array.isArray(timeframes) || timeframes.length === 0) {
+    return { hasSignal: false, timeframes: [] };
+  }
+
   const signalTimeframes = [];
   
-  // Kiểm tra từng timeframe
+  // Kiểm tra từng timeframe (đã được filter RSI oversold trước đó)
   for (const timeframe of timeframes) {
     try {
-      // Kiểm tra RSI oversold (chỉ kiểm tra các timeframe được chỉ định)
-      const rsi = token.rsi[timeframe];
-      if (rsi === null || rsi === undefined || isNaN(rsi)) {
-        continue;
-      }
-
-      const rsiStatus = getRSIStatus(rsi, timeframe);
-      if (rsiStatus !== 'oversold') {
-        continue; // Không phải oversold, bỏ qua timeframe này
-      }
-
       // Lấy dữ liệu kline để kiểm tra pattern
       const klineData = await fetchKlineData(token.symbol, timeframe, 10); // Chỉ cần 10 nến gần nhất
       
