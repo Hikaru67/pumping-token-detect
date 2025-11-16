@@ -1,9 +1,8 @@
 import cron from 'node-cron';
 import { fetchTickerData } from '../api/apiClient.js';
-import { getTop10PumpTokens, addRSIToTop10 } from '../utils/dataProcessor.js';
+import { getTop10PumpTokens, addRSIToTop10, countRSIOverboughtOversold, getOversoldTimeframes, getOverboughtTimeframes } from '../utils/dataProcessor.js';
 import { saveTop10, loadTop10 } from '../utils/storage.js';
 import { detectTop1Change, getTop1ChangeInfo, updateTop1Whitelist, getBaseSymbol, getRSIConfluenceIncreaseInfo, isQuietHours } from '../utils/comparator.js';
-import { getRSIStatus } from '../indicators/rsiCalculator.js';
 import { sendTelegramAlert, sendSingleSignalAlert } from '../telegram/telegramBot.js';
 import { checkReversalSignal } from '../indicators/candlestickPattern.js';
 import { config } from '../config.js';
@@ -50,6 +49,169 @@ async function checkPumpTokens() {
     // Xác định quiet hours mode (dùng cho cả alert thông thường và signal alert)
     const isQuietHoursMode = isQuietHours();
 
+    // 4. Load dữ liệu trước đó để so sánh số lượng RSI oversold và signal alerts đã gửi
+    const previousData = await loadTop10();
+    const lastSignalAlerts = previousData?.lastSignalAlerts || {};
+
+    // Helper function để tìm token tương ứng trong previousData
+    const findPreviousToken = (currentSymbol) => {
+      if (!previousData || !previousData.top10 || !Array.isArray(previousData.top10)) {
+        return null;
+      }
+      const baseSymbol = getBaseSymbol(currentSymbol);
+      return previousData.top10.find(token => {
+        const prevBaseSymbol = getBaseSymbol(token.symbol);
+        return prevBaseSymbol === baseSymbol;
+      }) || null;
+    };
+
+    /**
+     * So sánh signal hiện tại với signal đã gửi gần nhất
+     * @param {string} symbol - Token symbol
+     * @param {Array<string>} currentTimeframes - Timeframes có signal hiện tại
+     * @param {Object} lastSignalAlerts - Object chứa signal alerts đã gửi
+     * @returns {boolean} true nếu signal giống với lần gần nhất
+     */
+    const isSameAsLastSignal = (symbol, currentTimeframes, lastSignalAlerts) => {
+      if (!lastSignalAlerts || typeof lastSignalAlerts !== 'object') {
+        return false;
+      }
+
+      const baseSymbol = getBaseSymbol(symbol);
+      const lastSignal = lastSignalAlerts[baseSymbol];
+
+      if (!lastSignal || !Array.isArray(lastSignal.timeframes)) {
+        return false;
+      }
+
+      // So sánh timeframes (sắp xếp để so sánh)
+      const currentSorted = [...currentTimeframes].sort();
+      const lastSorted = [...lastSignal.timeframes].sort();
+
+      if (currentSorted.length !== lastSorted.length) {
+        return false;
+      }
+
+      return currentSorted.every((tf, index) => tf === lastSorted[index]);
+    };
+
+    /**
+     * Lưu signal alert đã gửi
+     * @param {string} symbol - Token symbol
+     * @param {Array<string>} timeframes - Timeframes có signal
+     * @param {Object} lastSignalAlerts - Object chứa signal alerts đã gửi (sẽ được cập nhật)
+     */
+    const saveSignalAlert = (symbol, timeframes, lastSignalAlerts) => {
+      const baseSymbol = getBaseSymbol(symbol);
+      lastSignalAlerts[baseSymbol] = {
+        timeframes: [...timeframes].sort(),
+        timestamp: new Date().toISOString(),
+      };
+    };
+
+    /**
+     * Kiểm tra và xử lý signal alert cho một token
+     * @param {Object} tokenWithRSI - Token đã có RSI data
+     * @param {Object} previousToken - Token tương ứng trong previousData (có thể null)
+     * @param {boolean} isPump - true nếu là pump alert (check overbought), false nếu là drop alert (check oversold)
+     * @returns {Promise<Object>} { shouldSend: boolean, reason: string, timeframes: Array<string> }
+     */
+    const checkSignalAlert = async (tokenWithRSI, previousToken, isPump = true) => {
+      const statusType = isPump ? 'overbought' : 'oversold';
+      const statusEmoji = isPump ? '🔴' : '🟢';
+      
+      console.log(`\n   🔍 [${tokenWithRSI.symbol}] Đang kiểm tra signal alert (${isPump ? 'Pump' : 'Drop'})...`);
+      
+      // Đếm số lượng RSI overbought/oversold hiện tại
+      const { overboughtCount, oversoldCount } = countRSIOverboughtOversold(tokenWithRSI.rsi);
+      const currentCount = isPump ? overboughtCount : oversoldCount;
+      console.log(`   📊 [${tokenWithRSI.symbol}] Số lượng RSI ${statusType} hiện tại: ${currentCount}`);
+      
+      // Đếm số lượng RSI overbought/oversold trước đó
+      const { overboughtCount: prevOverboughtCount, oversoldCount: prevOversoldCount } = previousToken 
+        ? countRSIOverboughtOversold(previousToken.rsi) 
+        : { overboughtCount: 0, oversoldCount: 0 };
+      const previousCount = isPump ? prevOverboughtCount : prevOversoldCount;
+      console.log(`   📊 [${tokenWithRSI.symbol}] Số lượng RSI ${statusType} trước đó: ${previousCount} ${previousToken ? '' : '(token mới)'}`);
+      
+      // Kiểm tra số lượng RSI có tăng không
+      const countIncreased = currentCount > previousCount;
+      console.log(`   📈 [${tokenWithRSI.symbol}] RSI ${statusType} tăng: ${countIncreased ? '✅ Có' : '❌ Không'}`);
+      
+      // Kiểm tra token có ít nhất 1 RSI overbought/oversold
+      if (currentCount === 0) {
+        console.log(`   ⏭️  [${tokenWithRSI.symbol}] Bỏ qua: Không có RSI ${statusType}`);
+        return { shouldSend: false, reason: `Không có RSI ${statusType}`, timeframes: [] };
+      }
+
+      const result = {
+        shouldSend: false,
+        reason: '',
+        timeframes: []
+      };
+
+      // Check 1: Có nến đảo chiều không?
+      // Luôn check tất cả các timeframes được chọn, không lọc theo RSI status
+      const targetTimeframes = ['Min5', 'Min15', 'Min30', 'Min60'];
+      const statusTimeframes = isPump 
+        ? getOverboughtTimeframes(tokenWithRSI.rsi, targetTimeframes)
+        : getOversoldTimeframes(tokenWithRSI.rsi, targetTimeframes);
+      console.log(`   📊 [${tokenWithRSI.symbol}] Timeframes có RSI ${statusType} trong [Min5, Min15, Min30, Min60]: ${statusTimeframes.length > 0 ? statusTimeframes.join(', ') : 'Không có'}`);
+      
+      // Kiểm tra tín hiệu đảo chiều từ nến - luôn check tất cả targetTimeframes, không lọc theo RSI
+      console.log(`   🔍 [${tokenWithRSI.symbol}] Đang check nến đảo chiều cho: ${targetTimeframes.join(', ')}`);
+      const signalResult = await checkReversalSignal(tokenWithRSI, targetTimeframes);
+      
+      if (signalResult.hasSignal && signalResult.timeframes.length > 0) {
+        result.shouldSend = true;
+        result.reason = 'Nến đảo chiều';
+        result.timeframes = signalResult.timeframes;
+        console.log(`   🚨 [${tokenWithRSI.symbol}] ✅ Tín hiệu đảo chiều tại: ${signalResult.timeframes.join(', ')}`);
+      } else {
+        console.log(`   ⏭️  [${tokenWithRSI.symbol}] Không có nến đảo chiều`);
+      }
+
+      // Check 2: Số lượng RSI overbought/oversold có tăng không?
+      if (countIncreased) {
+        result.shouldSend = true;
+        if (result.reason) {
+          result.reason += ` + RSI ${statusType} tăng`;
+        } else {
+          result.reason = `RSI ${statusType} tăng (${previousCount} → ${currentCount})`;
+        }
+        console.log(`   📈 [${tokenWithRSI.symbol}] ✅ RSI ${statusType} tăng từ ${previousCount} → ${currentCount}`);
+        
+        // Nếu chưa có timeframes từ nến đảo chiều, lấy tất cả timeframes có RSI overbought/oversold
+        if (result.timeframes.length === 0) {
+          result.timeframes = isPump 
+            ? getOverboughtTimeframes(tokenWithRSI.rsi)
+            : getOversoldTimeframes(tokenWithRSI.rsi);
+          console.log(`   📊 [${tokenWithRSI.symbol}] Lấy tất cả timeframes có RSI ${statusType}: ${result.timeframes.join(', ')}`);
+        }
+      } else {
+        console.log(`   ⏭️  [${tokenWithRSI.symbol}] RSI ${statusType} không tăng (${previousCount} → ${currentCount})`);
+      }
+
+      // Check 3: Kiểm tra xem signal có giống với lần gần nhất không?
+      if (result.shouldSend && result.timeframes.length > 0) {
+        const isSame = isSameAsLastSignal(tokenWithRSI.symbol, result.timeframes, lastSignalAlerts);
+        if (isSame) {
+          console.log(`   ⏭️  [${tokenWithRSI.symbol}] Bỏ qua: Signal giống với lần gần nhất (${result.timeframes.join(', ')})`);
+          result.shouldSend = false;
+          result.reason = 'Signal trùng với lần gần nhất';
+        } else {
+          console.log(`   ✅ [${tokenWithRSI.symbol}] Sẽ gửi alert (Lý do: ${result.reason}, Timeframes: ${result.timeframes.join(', ')})`);
+        }
+      } else {
+        const reasons = [];
+        if (!result.shouldSend) reasons.push('Không thỏa điều kiện');
+        if (result.timeframes.length === 0) reasons.push('Không có timeframes');
+        console.log(`   ❌ [${tokenWithRSI.symbol}] Không gửi alert: ${reasons.join(', ')}`);
+      }
+
+      return result;
+    };
+
     // 3. Tính RSI cho top 10 tokens và check signal alert ngay khi tính xong mỗi token
     console.log('\n📊 Đang tính RSI cho top 10 tokens...');
     
@@ -66,47 +228,23 @@ async function checkPumpTokens() {
       }
 
       try {
-        // Kiểm tra token có ít nhất 1 RSI oversold ở bất kỳ timeframe nào
-        let hasOversoldRSI = false;
-        if (tokenWithRSI.rsi && typeof tokenWithRSI.rsi === 'object') {
-          for (const [tf, rsi] of Object.entries(tokenWithRSI.rsi)) {
-            if (rsi !== null && !isNaN(rsi)) {
-              const status = getRSIStatus(rsi, tf);
-              if (status === 'oversold') {
-                hasOversoldRSI = true;
-                break; // Chỉ cần tìm thấy 1 RSI oversold là đủ
-              }
-            }
-          }
-        }
-
-        if (!hasOversoldRSI) {
-          return; // Không có RSI oversold ở bất kỳ timeframe nào, bỏ qua
-        }
-
-        // Tìm các timeframes có RSI oversold trong các timeframe cần check nến (Min5, Min15, Min30, Min60)
-        const targetTimeframes = ['Min5', 'Min15', 'Min30', 'Min60'];
-        const oversoldTimeframes = [];
+        // Tìm token tương ứng trong previousData để so sánh
+        const previousToken = findPreviousToken(tokenWithRSI.symbol);
         
-        for (const tf of targetTimeframes) {
-          const rsi = tokenWithRSI.rsi[tf];
-          if (rsi !== null && !isNaN(rsi)) {
-            const status = getRSIStatus(rsi, tf);
-            if (status === 'oversold') {
-              oversoldTimeframes.push(tf);
-            }
-          }
-        }
-
-        // Kiểm tra tín hiệu đảo chiều từ nến (chỉ check các timeframe có RSI oversold trong Min5, Min15, Min30, Min60)
-        const signalResult = await checkReversalSignal(tokenWithRSI, oversoldTimeframes.length > 0 ? oversoldTimeframes : targetTimeframes);
-        if (signalResult.hasSignal && signalResult.timeframes.length > 0) {
-          console.log(`   🚨 ${tokenWithRSI.symbol}: Tín hiệu đảo chiều tại ${signalResult.timeframes.join(', ')}`);
-          
-          // Gửi ngay khi phát hiện signal
-          const sendSuccess = await sendSingleSignalAlert(tokenWithRSI, signalResult.timeframes, isQuietHoursMode);
+        // Kiểm tra signal alert (true = pump alert, check overbought)
+        const signalCheck = await checkSignalAlert(tokenWithRSI, previousToken, true);
+        
+        // Gửi alert nếu thỏa điều kiện
+        if (signalCheck.shouldSend && signalCheck.timeframes.length > 0) {
+          const sendSuccess = await sendSingleSignalAlert(
+            tokenWithRSI, 
+            signalCheck.timeframes, 
+            isQuietHoursMode
+          );
           if (sendSuccess) {
-            console.log(`   ✅ Đã gửi signal alert cho ${tokenWithRSI.symbol}`);
+            console.log(`   ✅ Đã gửi signal alert cho ${tokenWithRSI.symbol} (Lý do: ${signalCheck.reason})`);
+            // Lưu signal alert đã gửi để tránh trùng lặp
+            saveSignalAlert(tokenWithRSI.symbol, signalCheck.timeframes, lastSignalAlerts);
           }
         }
       } catch (error) {
@@ -123,9 +261,6 @@ async function checkPumpTokens() {
         console.log(`   ${token.symbol}: ${confluenceStatus} Confluence (${token.rsiConfluence.count} timeframes)`);
       }
     });
-
-    // 4. Load dữ liệu trước đó
-    const previousData = await loadTop10();
 
     // 5. Kiểm tra và gửi alert
     // Nếu lần đầu chạy (chưa có dữ liệu), gửi alert luôn
@@ -159,8 +294,8 @@ async function checkPumpTokens() {
           console.log('✅ Top 1 thay đổi nhưng nằm trong whitelist, bỏ qua alert');
           console.log(`   Top 1 trước: ${changeInfo.previousTop1 ? changeInfo.previousTop1.symbol : 'N/A'}`);
           console.log(`   Top 1 hiện tại: ${changeInfo.currentTop1 ? changeInfo.currentTop1.symbol : 'N/A'} (trong whitelist)`);
-        } else {
-          console.log('🚨 Phát hiện thay đổi ở top 1!');
+          } else {
+            console.log('🚨 Phát hiện thay đổi ở top 1!');
           console.log(`   Top 1 trước: ${changeInfo.previousTop1 ? changeInfo.previousTop1.symbol : 'N/A'}`);
           console.log(`   Top 1 hiện tại: ${changeInfo.currentTop1 ? changeInfo.currentTop1.symbol : 'N/A'}`);
           
@@ -233,8 +368,8 @@ async function checkPumpTokens() {
 
     // Lưu ý: Signal alert đã được gửi ngay trong callback onTokenRSIComplete khi tính RSI xong mỗi token
 
-    // 7. Lưu top 10 mới (có RSI) và whitelist
-    await saveTop10(top10, newWhitelist);
+    // 7. Lưu top 10 mới (có RSI), whitelist và lastSignalAlerts
+    await saveTop10(top10, newWhitelist, lastSignalAlerts);
 
     const duration = Date.now() - startTime;
     console.log(`✅ Hoàn thành check trong ${duration}ms\n`);

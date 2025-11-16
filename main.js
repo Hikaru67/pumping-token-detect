@@ -31,7 +31,8 @@ console.log('='.repeat(60));
 startScheduler();
 
 // Khởi động Drop Token Scheduler
-startDropScheduler();
+// off drop scheduler
+// startDropScheduler();
 
 console.log('='.repeat(60));
 console.log('✅ Tất cả schedulers đã được khởi động');
