@@ -19,10 +19,16 @@ function isHammer(open, close, high, low) {
 
   if (range === 0) return false;
 
-  // Bóng dưới dài (ít nhất 2x thân) và bóng trên ngắn
-  return lowerShadow >= body * 2 && upperShadow <= body * 0.5;
+  // Hammer xuôi: bóng dưới dài (ít nhất 2x thân), bóng trên ngắn
+  const isRegularHammer = lowerShadow >= body * 2 && upperShadow <= body * 0.5;
+
+  // Hammer ngược: bóng trên dài (ít nhất 2x thân), bóng dưới ngắn
+  const isInvertedHammer = upperShadow >= body * 2 && lowerShadow <= body * 0.5;
+
+  return isRegularHammer || isInvertedHammer;
 }
 
+  
 /**
  * Kiểm tra nến có phải là Doji - tín hiệu đảo chiều
  * Doji: mở và đóng gần bằng nhau (thân rất nhỏ)
@@ -70,7 +76,7 @@ function isBullishEngulfing(candles) {
  * @param {Array} candles - Mảng các nến (ít nhất 2 nến)
  * @returns {boolean} true nếu có tín hiệu đảo chiều
  */
-function hasReversalSignal(candles) {
+export function hasReversalSignal(candles) {
   if (!Array.isArray(candles) || candles.length < 2) {
     return false;
   }

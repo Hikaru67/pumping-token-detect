@@ -71,16 +71,13 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
   } else {
     message += '\n';
   }
-
-  const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
   
   top10.forEach((token, index) => {
-    const medal = medals[index] || `${index + 1}.`;
     const riseFallPercent = (token.riseFallRate * 100).toFixed(2);
     const sign = token.riseFallRate >= 0 ? '+' : '';
     const cleanSymbolName = escapeMarkdown(cleanSymbol(token.symbol));
     
-    message += `${medal} *#${token.rank} $${cleanSymbolName} ${sign}${riseFallPercent}%`;
+    message += `*#${token.rank} $${cleanSymbolName} ${sign}${riseFallPercent}%`;
     
     // Thêm funding rate
     if (token.fundingRate !== undefined && token.fundingRate !== null && !isNaN(token.fundingRate)) {
@@ -121,14 +118,14 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
           return `${formattedTF}${emoji}${rsiValue}`;
         });
         
-        message += `   📊 RSI: ${rsiStrings.join(' • ')}\n`;
+        message += `📊 RSI: ${rsiStrings.join(' • ')}\n`;
       } else {
         // Nếu không có RSI data, thông báo
-        message += `   📊 RSI: ⚠️ Không có dữ liệu\n`;
+        message += `📊 RSI: ⚠️ Không có dữ liệu\n`;
       }
     } else {
       // Nếu không có RSI object, thông báo
-      message += `   📊 RSI: ⚠️ Chưa tính toán\n`;
+      message += `📊 RSI: ⚠️ Chưa tính toán\n`;
     }
     
     message += `\n`;
@@ -216,16 +213,13 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
   } else {
     message += '\n';
   }
-
-  const medals = ['🔻', '🔻', '🔻', '🔻', '🔻', '🔻', '🔻', '🔻', '🔻', '🔻'];
   
   top10.forEach((token, index) => {
-    const medal = medals[index] || `${index + 1}.`;
     const riseFallPercent = (token.riseFallRate * 100).toFixed(2);
     const sign = token.riseFallRate >= 0 ? '+' : '';
     const cleanSymbolName = escapeMarkdown(cleanSymbol(token.symbol));
     
-    message += `${medal} *#${token.rank} $${cleanSymbolName}*\n`;
+    message += `*#${token.rank} $${cleanSymbolName}*\n`;
     message += `   Biến động: *${sign}${riseFallPercent}%*\n`;
     
     // Thêm funding rate
@@ -266,7 +260,7 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
           return `${formattedTF}${emoji}${rsiValue}`;
         });
         
-        message += `   📊 RSI: ${rsiStrings.join(' • ')}\n`;
+        message += `📊 RSI: ${rsiStrings.join(' • ')}\n`;
         
         // Hiển thị confluence nếu có (nổi bật hơn)
         if (token.rsiConfluence && token.rsiConfluence.hasConfluence) {
@@ -276,15 +270,15 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
             : 'OVERBOUGHT CONFLUENCE ⬇️';
           const timeframesList = token.rsiConfluence.timeframes.map(tf => formatTimeframe(tf)).join(', ');
           
-          message += `   ${confluenceEmoji} *${confluenceText}* \\(${token.rsiConfluence.count} TFs: ${timeframesList}\\)\n`;
+          message += `   ${confluenceEmoji} *${confluenceText}* (${token.rsiConfluence.count} TFs: ${timeframesList})\n`;
         }
       } else {
         // Nếu không có RSI data, thông báo
-        message += `   📊 RSI: ⚠️ Không có dữ liệu\n`;
+        message += `📊 RSI: ⚠️ Không có dữ liệu\n`;
       }
     } else {
       // Nếu không có RSI object, thông báo
-      message += `   📊 RSI: ⚠️ Chưa tính toán\n`;
+      message += `📊 RSI: ⚠️ Chưa tính toán\n`;
     }
     
     if (token.high24Price > 0 && token.lower24Price > 0) {
@@ -292,7 +286,7 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
     }
     
     if (token.lastPrice > 0) {
-      message += `   Giá hiện tại: ${token.lastPrice}\n`;
+      message += `   Giá hiện tại: ${token.lastPrice}\n\n`;
     }
     
     message += `   Volume 24h: ${formatNumber(token.volume24)}\n\n`;
@@ -349,7 +343,7 @@ function formatSignalAlertMessage(signalTokens) {
     }).filter(Boolean);
     
     if (rsiStrings.length > 0) {
-      message += `   📊 RSI Oversold: ${rsiStrings.join(' • ')}\n`;
+      message += `   📊 RSI Oversold: ${rsiStrings.join(' • ')}\n\n`;
     }
     
     // Hiển thị timeframes có signal
@@ -357,7 +351,7 @@ function formatSignalAlertMessage(signalTokens) {
     message += `   🔄 Tín hiệu đảo chiều: ${tfList}\n`;
     
     if (token.lastPrice > 0) {
-      message += `   Giá hiện tại: ${token.lastPrice}\n`;
+      message += `💰Giá hiện tại: ${token.lastPrice}\n\n`;
     }
     
     message += `   Volume 24h: ${formatNumber(token.volume24)}\n\n`;
@@ -462,10 +456,10 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
         const tfList = signalTimeframes.map(tf => formatTimeframe(tf)).join(', ');
         // Chỉ hiển thị "Tín hiệu đảo chiều" nếu thực sự có nến đảo chiều
         if (reason && reason.includes('Nến đảo chiều')) {
-          message += `🔄 *Tín hiệu đảo chiều:* ${tfList}\n`;
+          message += `🔄 *Tín hiệu đảo chiều:* ${tfList}\n\n`;
         } else {
           // Nếu là RSI tăng, hiển thị timeframes có RSI overbought/oversold
-          message += `📊 *Timeframes có RSI:* ${tfList}\n`;
+          message += `📊 *Timeframes có RSI:* ${tfList}\n\n`;
         }
       }
     } else {
@@ -481,7 +475,7 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
   }
   
   if (token.lastPrice > 0) {
-    message += `💰 Giá hiện tại: ${token.lastPrice}\n`;
+    message += `💰 Giá hiện tại: ${token.lastPrice}\n\n`;
   }
   
   if (token.riseFallRate !== undefined) {

@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node main.js",
     "dev": "node --watch main.js",
-    "test:telegram": "node test-telegram.js"
+    "test:telegram": "node test-telegram.js",
+    "test:patterns": "node --test tests/hasReversalSignal.test.js"
   },
   "keywords": [
     "crypto",
