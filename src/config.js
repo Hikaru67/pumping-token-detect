@@ -60,8 +60,11 @@ export const config = {
   rsiConfluenceMinTimeframes: parseInt(process.env.RSI_CONFLUENCE_MIN_TIMEFRAMES || '2', 10),
   
   // RSI Delay Configuration (để tránh rate limit)
-  rsiDelayBetweenTimeframes: parseInt(process.env.RSI_DELAY_BETWEEN_TIMEFRAMES || '100', 10), // Delay giữa các timeframes (ms)
+  rsiDelayBetweenTimeframes: parseInt(process.env.RSI_DELAY_BETWEEN_TIMEFRAMES || '100', 10), // Delay giữa các timeframes (ms) - không dùng khi tính song song
   rsiDelayBetweenTokens: parseInt(process.env.RSI_DELAY_BETWEEN_TOKENS || '200', 10), // Delay giữa các tokens (ms)
+  
+  // RSI Concurrent Configuration (để tính song song)
+  rsiMaxConcurrentTimeframes: parseInt(process.env.RSI_MAX_CONCURRENT_TIMEFRAMES || '5', 10), // Số lượng timeframes tính song song tối đa cho 1 token
   
   // Signal Alert Configuration
   signalAlertMinRSICount: parseInt(process.env.SIGNAL_ALERT_MIN_RSI_COUNT || '3', 10), // Số lượng RSI overbought/oversold tối thiểu để trigger signal alert

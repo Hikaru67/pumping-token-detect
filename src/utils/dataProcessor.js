@@ -28,6 +28,132 @@ function delay(ms) {
 }
 
 
+/**
+ * Tính RSI cho một timeframe cụ thể
+ * @param {string} symbol - Symbol của token
+ * @param {string} timeframe - Timeframe cần tính
+ * @param {Array<string>} timeframeOrder - Thứ tự timeframes để biết timeframe nào lớn hơn
+ * @returns {Promise<Object>} { timeframe, rsi: number|null, error: string|null, shouldSkipLarger: boolean }
+ */
+async function calculateRSIForTimeframe(symbol, timeframe, timeframeOrder) {
+  try {
+    // Lấy kline data từ API
+    const klineData = await fetchKlineData(symbol, timeframe, config.rsiPeriod + 50);
+    
+    if (!klineData || !Array.isArray(klineData.close) || klineData.close.length === 0) {
+      console.warn(`⚠️  Không có dữ liệu kline cho ${symbol} (${timeframe})`);
+      return {
+        timeframe,
+        rsi: null,
+        error: 'Không có dữ liệu kline',
+        shouldSkipLarger: true, // Skip các timeframe lớn hơn
+      };
+    }
+
+    // Trích xuất giá đóng cửa (close price)
+    const closes = (klineData.realClose || klineData.close || [])
+      .map(close => parseFloat(close))
+      .filter(val => !isNaN(val) && val > 0);
+    
+    if (closes.length < config.rsiPeriod + 1) {
+      console.warn(`⚠️  Không đủ dữ liệu close price để tính RSI cho ${symbol} (${timeframe}): chỉ có ${closes.length} candles, cần ít nhất ${config.rsiPeriod + 1}`);
+      return {
+        timeframe,
+        rsi: null,
+        error: `Không đủ dữ liệu (${closes.length} < ${config.rsiPeriod + 1})`,
+        shouldSkipLarger: true, // Skip các timeframe lớn hơn
+      };
+    }
+    
+    // Tính RSI
+    const rsi = calculateRSI(closes);
+    
+    if (rsi !== null) {
+      console.log(`   ✅ ${symbol} ${formatTimeframe(timeframe)}: RSI = ${rsi.toFixed(2)}`);
+    }
+    
+    return {
+      timeframe,
+      rsi,
+      error: null,
+      shouldSkipLarger: false,
+    };
+  } catch (error) {
+    console.warn(`⚠️  Lỗi khi tính RSI cho ${symbol} (${timeframe}): ${error.message}`);
+    
+    // Nếu có lỗi nghiêm trọng (không phải lỗi network tạm thời), có thể skip các timeframe lớn hơn
+    const shouldSkipLarger = error.message.includes('Không đủ') || error.message.includes('không có dữ liệu');
+    
+    return {
+      timeframe,
+      rsi: null,
+      error: error.message,
+      shouldSkipLarger,
+    };
+  }
+}
+
+/**
+ * Xử lý batch timeframes với giới hạn concurrent
+ * @param {Array<string>} timeframes - Danh sách timeframes cần tính
+ * @param {string} symbol - Symbol của token
+ * @param {Array<string>} timeframeOrder - Thứ tự timeframes
+ * @param {number} maxConcurrent - Số lượng concurrent tối đa
+ * @returns {Promise<Array>} Kết quả tính RSI cho từng timeframe
+ */
+async function processTimeframesBatch(timeframes, symbol, timeframeOrder, maxConcurrent) {
+  const results = [];
+  
+  // Xử lý từng batch
+  for (let i = 0; i < timeframes.length; i += maxConcurrent) {
+    const batch = timeframes.slice(i, i + maxConcurrent);
+    
+    // Tính song song trong batch
+    const batchPromises = batch.map(tf => calculateRSIForTimeframe(symbol, tf, timeframeOrder));
+    const batchResults = await Promise.allSettled(batchPromises);
+    
+    // Xử lý kết quả batch
+    for (let j = 0; j < batchResults.length; j++) {
+      const result = batchResults[j];
+      if (result.status === 'fulfilled') {
+        results.push(result.value);
+        
+        // Nếu cần skip các timeframe lớn hơn, đánh dấu và dừng
+        if (result.value.shouldSkipLarger) {
+          const currentIndex = timeframeOrder.indexOf(batch[j]);
+          if (currentIndex !== -1) {
+            const remainingTimeframes = timeframes.slice(i + j + 1);
+            if (remainingTimeframes.length > 0) {
+              console.warn(`   ⏭️  Bỏ qua các timeframe lớn hơn: ${remainingTimeframes.map(tf => formatTimeframe(tf)).join(', ')}`);
+              // Thêm null cho các timeframe bị skip
+              remainingTimeframes.forEach(tf => {
+                results.push({
+                  timeframe: tf,
+                  rsi: null,
+                  error: 'Skipped do lỗi ở timeframe nhỏ hơn',
+                  shouldSkipLarger: false,
+                });
+              });
+            }
+          }
+          // Trả về kết quả đã xử lý (bao gồm cả các timeframe bị skip)
+          return results;
+        }
+      } else {
+        // Lỗi khi gọi function
+        results.push({
+          timeframe: batch[j],
+          rsi: null,
+          error: result.reason?.message || 'Unknown error',
+          shouldSkipLarger: false,
+        });
+      }
+    }
+  }
+  
+  return results;
+}
+
 async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
   const rsiData = {};
   const errors = [];
@@ -42,104 +168,15 @@ async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
     return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
   });
 
-  // Tính RSI tuần tự để tránh rate limit (thêm delay nhỏ giữa các request)
-  for (const timeframe of sortedTimeframes) {
-    try {
-      // Lấy kline data từ API
-      // Format response: { time: [...], open: [...], close: [...], high: [...], low: [...], vol: [...], amount: [...] }
-      const klineData = await fetchKlineData(symbol, timeframe, config.rsiPeriod + 50);
-      
-      if (!klineData || !Array.isArray(klineData.close) || klineData.close.length === 0) {
-        console.warn(`⚠️  Không có dữ liệu kline cho ${symbol} (${timeframe})`);
-        rsiData[timeframe] = null;
-        
-        // Nếu không có dữ liệu kline, skip tất cả các timeframe lớn hơn
-        const currentIndex = timeframeOrder.indexOf(timeframe);
-        if (currentIndex !== -1) {
-          const remainingTimeframes = sortedTimeframes.filter(tf => {
-            const tfIndex = timeframeOrder.indexOf(tf);
-            return tfIndex > currentIndex;
-          });
-          if (remainingTimeframes.length > 0) {
-            console.warn(`   ⏭️  Bỏ qua các timeframe lớn hơn: ${remainingTimeframes.map(tf => formatTimeframe(tf)).join(', ')}`);
-            for (const tf of remainingTimeframes) {
-              rsiData[tf] = null;
-            }
-          }
-        }
-        
-        // Delay nhỏ trước khi tiếp tục
-        await delay(config.rsiDelayBetweenTimeframes || 100);
-        break; // Dừng vòng lặp vì đã skip các timeframe lớn hơn
-      }
-
-      // Trích xuất giá đóng cửa (close price)
-      // MEXC kline format: { close: [price1, price2, ...] }
-      // Sử dụng realClose nếu có, nếu không thì dùng close
-      const closes = (klineData.realClose || klineData.close || [])
-        .map(close => parseFloat(close))
-        .filter(val => !isNaN(val) && val > 0);
-      
-      if (closes.length < config.rsiPeriod + 1) {
-        console.warn(`⚠️  Không đủ dữ liệu close price để tính RSI cho ${symbol} (${timeframe}): chỉ có ${closes.length} candles, cần ít nhất ${config.rsiPeriod + 1}`);
-        rsiData[timeframe] = null;
-        
-        // Nếu không đủ dữ liệu, skip tất cả các timeframe lớn hơn
-        const currentIndex = timeframeOrder.indexOf(timeframe);
-        if (currentIndex !== -1) {
-          const remainingTimeframes = sortedTimeframes.filter(tf => {
-            const tfIndex = timeframeOrder.indexOf(tf);
-            return tfIndex > currentIndex;
-          });
-          if (remainingTimeframes.length > 0) {
-            console.warn(`   ⏭️  Bỏ qua các timeframe lớn hơn: ${remainingTimeframes.map(tf => formatTimeframe(tf)).join(', ')}`);
-            for (const tf of remainingTimeframes) {
-              rsiData[tf] = null;
-            }
-          }
-        }
-        
-        await delay(config.rsiDelayBetweenTimeframes || 100);
-        break; // Dừng vòng lặp vì đã skip các timeframe lớn hơn
-      }
-      
-      // Tính RSI
-      const rsi = calculateRSI(closes);
-      rsiData[timeframe] = rsi;
-      
-      if (rsi !== null) {
-        console.log(`   ✅ ${symbol} ${formatTimeframe(timeframe)}: RSI = ${rsi.toFixed(2)}`);
-      }
-      
-      // Delay nhỏ giữa các request để tránh rate limit
-      await delay(config.rsiDelayBetweenTimeframes || 100);
-    } catch (error) {
-      console.warn(`⚠️  Lỗi khi tính RSI cho ${symbol} (${timeframe}): ${error.message}`);
-      rsiData[timeframe] = null;
-      errors.push({ timeframe, error: error.message });
-      
-      // Nếu có lỗi nghiêm trọng (không phải lỗi network tạm thời), có thể skip các timeframe lớn hơn
-      // Nhưng để an toàn, chỉ skip khi lỗi liên quan đến dữ liệu không đủ
-      if (error.message.includes('Không đủ') || error.message.includes('không có dữ liệu')) {
-        const currentIndex = timeframeOrder.indexOf(timeframe);
-        if (currentIndex !== -1) {
-          const remainingTimeframes = sortedTimeframes.filter(tf => {
-            const tfIndex = timeframeOrder.indexOf(tf);
-            return tfIndex > currentIndex;
-          });
-          if (remainingTimeframes.length > 0) {
-            console.warn(`   ⏭️  Bỏ qua các timeframe lớn hơn: ${remainingTimeframes.map(tf => formatTimeframe(tf)).join(', ')}`);
-            for (const tf of remainingTimeframes) {
-              rsiData[tf] = null;
-            }
-          }
-        }
-        await delay(config.rsiDelayBetweenTimeframes || 100);
-        break; // Dừng vòng lặp
-      }
-      
-      // Delay ngay cả khi có lỗi
-      await delay(config.rsiDelayBetweenTimeframes || 100);
+  // Tính RSI song song cho các timeframes (với giới hạn concurrent)
+  const maxConcurrent = config.rsiMaxConcurrentTimeframes;
+  const results = await processTimeframesBatch(sortedTimeframes, symbol, timeframeOrder, maxConcurrent);
+  
+  // Xử lý kết quả
+  for (const result of results) {
+    rsiData[result.timeframe] = result.rsi;
+    if (result.error) {
+      errors.push({ timeframe: result.timeframe, error: result.error });
     }
   }
 
