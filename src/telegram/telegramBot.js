@@ -131,6 +131,7 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
     message += `\n`;
   });
 
+  message += `\n⏰ Thời gian: ${timestamp}\n`;
   // Kiểm tra độ dài message (Telegram limit: 4096 characters)
   if (message.length > 4096) {
     console.warn('⚠️  Message quá dài, sẽ bị cắt bớt');
@@ -459,7 +460,7 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
           message += `🔄 *Tín hiệu đảo chiều:* ${tfList}\n\n`;
         } else {
           // Nếu là RSI tăng, hiển thị timeframes có RSI overbought/oversold
-          message += `📊 *Timeframes có RSI:* ${tfList}\n\n`;
+          message += `📊 *RSI overbought:* ${tfList}\n\n`;
         }
       }
     } else {

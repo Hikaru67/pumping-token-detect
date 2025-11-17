@@ -44,8 +44,8 @@ function isDoji(open, close, high, low) {
 
   if (range === 0) return false;
 
-  // Thân nhỏ hơn 5% của range
-  return body <= range * 0.05;
+  // Thân nhỏ hơn 20% của range
+  return body < range * 0.2;
 }
 
 /**
