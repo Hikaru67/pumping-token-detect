@@ -1,5 +1,5 @@
-import { startScheduler } from './scheduler.js';
-import { startDropScheduler } from './dropScheduler.js';
+import { startScheduler } from './src/schedulers/scheduler.js';
+import { startDropScheduler } from './src/schedulers/dropScheduler.js';
 
 // Xử lý lỗi không bắt được
 process.on('unhandledRejection', (reason, promise) => {
@@ -31,7 +31,8 @@ console.log('='.repeat(60));
 startScheduler();
 
 // Khởi động Drop Token Scheduler
-startDropScheduler();
+// off drop scheduler
+// startDropScheduler();
 
 console.log('='.repeat(60));
 console.log('✅ Tất cả schedulers đã được khởi động');

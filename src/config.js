@@ -8,12 +8,23 @@ export const config = {
   
   // Telegram Bot - Pump Tokens
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
-  telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
+  telegramChatId: process.env.TELEGRAM_CHAT_ID || '', // Channel ID (channel riêng)
+  telegramGroupId: process.env.TELEGRAM_GROUP_ID || '', // Group ID (để gửi vào topic)
   telegramDisableNotification: process.env.TELEGRAM_DISABLE_NOTIFICATION === 'true', // Silent mode (không có âm thanh/thông báo)
+  telegramTopicId: process.env.TELEGRAM_TOPIC_ID && process.env.TELEGRAM_TOPIC_ID.trim() !== '' 
+    ? parseInt(process.env.TELEGRAM_TOPIC_ID, 10) 
+    : null, // Topic ID trong group (message_thread_id)
+  telegramSignalTopicId: process.env.TELEGRAM_SIGNAL_TOPIC_ID && process.env.TELEGRAM_SIGNAL_TOPIC_ID.trim() !== '' 
+    ? parseInt(process.env.TELEGRAM_SIGNAL_TOPIC_ID, 10) 
+    : null, // Topic ID cho signal alerts (tín hiệu đảo chiều)
   
   // Telegram Bot - Drop Tokens
-  telegramDropChatId: process.env.TELEGRAM_DROP_CHAT_ID || '',
+  telegramDropChatId: process.env.TELEGRAM_DROP_CHAT_ID || '', // Channel ID cho drop (channel riêng)
+  telegramDropGroupId: process.env.TELEGRAM_DROP_GROUP_ID || '', // Group ID cho drop (để gửi vào topic)
   telegramDropDisableNotification: process.env.TELEGRAM_DROP_DISABLE_NOTIFICATION === 'true', // Silent mode cho drop alerts
+  telegramDropTopicId: process.env.TELEGRAM_DROP_TOPIC_ID && process.env.TELEGRAM_DROP_TOPIC_ID.trim() !== '' 
+    ? parseInt(process.env.TELEGRAM_DROP_TOPIC_ID, 10) 
+    : null, // Topic ID trong group cho drop alerts (message_thread_id)
   
   // Scheduler
   cronSchedule: process.env.CRON_SCHEDULE || '*/1 * * * *', // Mỗi 1 phút
@@ -43,6 +54,7 @@ export const config = {
   rsiOversoldThreshold: parseFloat(process.env.RSI_OVERSOLD_THRESHOLD || '30', 10),
   rsiOverboughtThreshold: parseFloat(process.env.RSI_OVERBOUGHT_THRESHOLD || '70', 10), // Cho khung lớn (hours/days)
   rsiOverboughtThresholdSmall: parseFloat(process.env.RSI_OVERBOUGHT_THRESHOLD_SMALL || '70', 10), // Cho khung bé (minutes)
+  rsiSuperOverboughtThreshold: parseFloat(process.env.RSI_SUPER_OVER_BOUGHT || '90', 10), // RSI siêu overbought (highlight signal)
   
   // Số lượng timeframes cần có confluence (mặc định: ít nhất 2 timeframes)
   rsiConfluenceMinTimeframes: parseInt(process.env.RSI_CONFLUENCE_MIN_TIMEFRAMES || '2', 10),
@@ -50,12 +62,19 @@ export const config = {
   // RSI Delay Configuration (để tránh rate limit)
   rsiDelayBetweenTimeframes: parseInt(process.env.RSI_DELAY_BETWEEN_TIMEFRAMES || '100', 10), // Delay giữa các timeframes (ms)
   rsiDelayBetweenTokens: parseInt(process.env.RSI_DELAY_BETWEEN_TOKENS || '200', 10), // Delay giữa các tokens (ms)
+  
+  // Signal Alert Configuration
+  signalAlertMinRSICount: parseInt(process.env.SIGNAL_ALERT_MIN_RSI_COUNT || '3', 10), // Số lượng RSI overbought/oversold tối thiểu để trigger signal alert
 };
 
 // Validate required config
-if (!config.telegramBotToken || !config.telegramChatId) {
-  console.warn('⚠️  Cảnh báo: TELEGRAM_BOT_TOKEN và TELEGRAM_CHAT_ID chưa được cấu hình!');
-  console.warn('   Vui lòng tạo file .env và cấu hình các giá trị này.');
+if (!config.telegramBotToken) {
+  console.warn('⚠️  Cảnh báo: TELEGRAM_BOT_TOKEN chưa được cấu hình!');
+  console.warn('   Vui lòng tạo file .env và cấu hình giá trị này.');
+}
+if (!config.telegramChatId && !config.telegramGroupId) {
+  console.warn('⚠️  Cảnh báo: TELEGRAM_CHAT_ID (channel) hoặc TELEGRAM_GROUP_ID chưa được cấu hình!');
+  console.warn('   Vui lòng cấu hình ít nhất một trong hai giá trị này.');
 }
 
 if (!config.telegramDropChatId) {

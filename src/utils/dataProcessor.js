@@ -1,16 +1,7 @@
-import { fetchKlineData } from './apiClient.js';
-import { calculateRSI, checkRSIConfluence, formatTimeframe, getRSIStatus } from './rsiCalculator.js';
-import { config } from './config.js';
-
-/**
- * Bỏ đuôi _USDT hoặc _USDC trong symbol để so sánh
- * @param {string} symbol - Symbol gốc
- * @returns {string} Symbol đã bỏ đuôi
- */
-function getBaseSymbol(symbol) {
-  if (!symbol) return '';
-  return symbol.replace(/_USDT$|_USDC$/, '');
-}
+import { fetchKlineData } from '../api/apiClient.js';
+import { calculateRSI, checkRSIConfluence, formatTimeframe, getRSIStatus } from '../indicators/rsiCalculator.js';
+import { config } from '../config.js';
+import { getBaseSymbol } from './symbolUtils.js';
 
 /**
  * Parse và format fundingRate từ token
@@ -36,18 +27,23 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Tính RSI cho một token với nhiều timeframes
- * @param {string} symbol - Symbol của token
- * @param {Array<string>} timeframes - Mảng các timeframes cần tính RSI
- * @returns {Promise<Object>} Object chứa RSI của các timeframes và confluence info
- */
+
 async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
   const rsiData = {};
   const errors = [];
 
+  // Định nghĩa thứ tự timeframe (từ nhỏ đến lớn) để biết timeframe nào lớn hơn
+  const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Min60', 'Hour1', 'Hour4', 'Hour8', 'Day1', 'Week1', 'Month1'];
+  
+  // Sắp xếp timeframes theo thứ tự từ nhỏ đến lớn
+  const sortedTimeframes = [...timeframes].sort((a, b) => {
+    const indexA = timeframeOrder.indexOf(a);
+    const indexB = timeframeOrder.indexOf(b);
+    return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+  });
+
   // Tính RSI tuần tự để tránh rate limit (thêm delay nhỏ giữa các request)
-  for (const timeframe of timeframes) {
+  for (const timeframe of sortedTimeframes) {
     try {
       // Lấy kline data từ API
       // Format response: { time: [...], open: [...], close: [...], high: [...], low: [...], vol: [...], amount: [...] }
@@ -56,9 +52,25 @@ async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
       if (!klineData || !Array.isArray(klineData.close) || klineData.close.length === 0) {
         console.warn(`⚠️  Không có dữ liệu kline cho ${symbol} (${timeframe})`);
         rsiData[timeframe] = null;
+        
+        // Nếu không có dữ liệu kline, skip tất cả các timeframe lớn hơn
+        const currentIndex = timeframeOrder.indexOf(timeframe);
+        if (currentIndex !== -1) {
+          const remainingTimeframes = sortedTimeframes.filter(tf => {
+            const tfIndex = timeframeOrder.indexOf(tf);
+            return tfIndex > currentIndex;
+          });
+          if (remainingTimeframes.length > 0) {
+            console.warn(`   ⏭️  Bỏ qua các timeframe lớn hơn: ${remainingTimeframes.map(tf => formatTimeframe(tf)).join(', ')}`);
+            for (const tf of remainingTimeframes) {
+              rsiData[tf] = null;
+            }
+          }
+        }
+        
         // Delay nhỏ trước khi tiếp tục
         await delay(config.rsiDelayBetweenTimeframes || 100);
-        continue;
+        break; // Dừng vòng lặp vì đã skip các timeframe lớn hơn
       }
 
       // Trích xuất giá đóng cửa (close price)
@@ -71,8 +83,24 @@ async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
       if (closes.length < config.rsiPeriod + 1) {
         console.warn(`⚠️  Không đủ dữ liệu close price để tính RSI cho ${symbol} (${timeframe}): chỉ có ${closes.length} candles, cần ít nhất ${config.rsiPeriod + 1}`);
         rsiData[timeframe] = null;
+        
+        // Nếu không đủ dữ liệu, skip tất cả các timeframe lớn hơn
+        const currentIndex = timeframeOrder.indexOf(timeframe);
+        if (currentIndex !== -1) {
+          const remainingTimeframes = sortedTimeframes.filter(tf => {
+            const tfIndex = timeframeOrder.indexOf(tf);
+            return tfIndex > currentIndex;
+          });
+          if (remainingTimeframes.length > 0) {
+            console.warn(`   ⏭️  Bỏ qua các timeframe lớn hơn: ${remainingTimeframes.map(tf => formatTimeframe(tf)).join(', ')}`);
+            for (const tf of remainingTimeframes) {
+              rsiData[tf] = null;
+            }
+          }
+        }
+        
         await delay(config.rsiDelayBetweenTimeframes || 100);
-        continue;
+        break; // Dừng vòng lặp vì đã skip các timeframe lớn hơn
       }
       
       // Tính RSI
@@ -89,6 +117,27 @@ async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
       console.warn(`⚠️  Lỗi khi tính RSI cho ${symbol} (${timeframe}): ${error.message}`);
       rsiData[timeframe] = null;
       errors.push({ timeframe, error: error.message });
+      
+      // Nếu có lỗi nghiêm trọng (không phải lỗi network tạm thời), có thể skip các timeframe lớn hơn
+      // Nhưng để an toàn, chỉ skip khi lỗi liên quan đến dữ liệu không đủ
+      if (error.message.includes('Không đủ') || error.message.includes('không có dữ liệu')) {
+        const currentIndex = timeframeOrder.indexOf(timeframe);
+        if (currentIndex !== -1) {
+          const remainingTimeframes = sortedTimeframes.filter(tf => {
+            const tfIndex = timeframeOrder.indexOf(tf);
+            return tfIndex > currentIndex;
+          });
+          if (remainingTimeframes.length > 0) {
+            console.warn(`   ⏭️  Bỏ qua các timeframe lớn hơn: ${remainingTimeframes.map(tf => formatTimeframe(tf)).join(', ')}`);
+            for (const tf of remainingTimeframes) {
+              rsiData[tf] = null;
+            }
+          }
+        }
+        await delay(config.rsiDelayBetweenTimeframes || 100);
+        break; // Dừng vòng lặp
+      }
+      
       // Delay ngay cả khi có lỗi
       await delay(config.rsiDelayBetweenTimeframes || 100);
     }
@@ -181,11 +230,11 @@ export function getTop10PumpTokens(data) {
 }
 
 /**
- * Tính số lượng timeframes có RSI overbought/oversold
+ * Đếm số lượng RSI overbought và oversold
  * @param {Object} rsiData - Object chứa RSI của các timeframes
  * @returns {Object} { overboughtCount, oversoldCount }
  */
-function countRSIOverboughtOversold(rsiData) {
+export function countRSIOverboughtOversold(rsiData) {
   if (!rsiData || typeof rsiData !== 'object') {
     return { overboughtCount: 0, oversoldCount: 0 };
   }
@@ -205,6 +254,81 @@ function countRSIOverboughtOversold(rsiData) {
   });
 
   return { overboughtCount, oversoldCount };
+}
+
+/**
+ * Lấy danh sách các timeframes có RSI oversold
+ * @param {Object} rsiData - Object chứa RSI của các timeframes
+ * @param {Array<string>} targetTimeframes - Các timeframes cần check (optional, nếu không có thì check tất cả)
+ * @returns {Array<string>} Danh sách timeframes có RSI oversold
+ */
+export function getOversoldTimeframes(rsiData, targetTimeframes = null) {
+  if (!rsiData || typeof rsiData !== 'object') {
+    return [];
+  }
+
+  const oversoldTimeframes = [];
+  const timeframesToCheck = targetTimeframes || Object.keys(rsiData);
+
+  for (const tf of timeframesToCheck) {
+    const rsi = rsiData[tf];
+    if (rsi !== null && !isNaN(rsi)) {
+      const status = getRSIStatus(rsi, tf);
+      if (status === 'oversold') {
+        oversoldTimeframes.push(tf);
+      }
+    }
+  }
+
+  return oversoldTimeframes;
+}
+
+/**
+ * Lấy danh sách các timeframes có RSI overbought
+ * @param {Object} rsiData - Object chứa RSI của các timeframes
+ * @param {Array<string>} targetTimeframes - Các timeframes cần check (optional, nếu không có thì check tất cả)
+ * @returns {Array<string>} Danh sách timeframes có RSI overbought
+ */
+export function getOverboughtTimeframes(rsiData, targetTimeframes = null) {
+  if (!rsiData || typeof rsiData !== 'object') {
+    return [];
+  }
+
+  const overboughtTimeframes = [];
+  const timeframesToCheck = targetTimeframes || Object.keys(rsiData);
+
+  for (const tf of timeframesToCheck) {
+    const rsi = rsiData[tf];
+    if (rsi !== null && !isNaN(rsi)) {
+      const status = getRSIStatus(rsi, tf);
+      if (status === 'overbought') {
+        overboughtTimeframes.push(tf);
+      }
+    }
+  }
+
+  return overboughtTimeframes;
+}
+
+/**
+ * Đếm số lượng timeframes có RSI >= SUPER_OVER_BOUGHT threshold
+ * @param {Object} rsiData - Object chứa RSI của các timeframes
+ * @returns {number} Số lượng timeframes có RSI >= SUPER_OVER_BOUGHT threshold
+ */
+export function countSuperOverboughtRSI(rsiData) {
+  if (!rsiData || typeof rsiData !== 'object') {
+    return 0;
+  }
+
+  const superOverboughtThreshold = config.rsiSuperOverboughtThreshold;
+  let count = 0;
+  for (const [tf, rsi] of Object.entries(rsiData)) {
+    if (rsi !== null && !isNaN(rsi) && rsi >= superOverboughtThreshold) {
+      count++;
+    }
+  }
+
+  return count;
 }
 
 /**
@@ -322,12 +446,13 @@ function sortTop10ByRSI(top10, isPump = true) {
 }
 
 /**
- * Tính RSI cho top 10 tokens
+ * Tính RSI cho top 10 tokens (song song để tăng tốc)
  * @param {Array} top10 - Top 10 tokens (chưa có RSI)
  * @param {boolean} isPump - true nếu là pump alert, false nếu là drop alert (mặc định: true)
+ * @param {Function} onTokenRSIComplete - Callback được gọi sau khi tính RSI xong cho mỗi token (async)
  * @returns {Promise<Array>} Top 10 tokens với RSI đã được tính và sắp xếp lại
  */
-export async function addRSIToTop10(top10, isPump = true) {
+export async function addRSIToTop10(top10, isPump = true, onTokenRSIComplete = null) {
   if (!Array.isArray(top10) || top10.length === 0) {
     return top10;
   }
@@ -344,12 +469,23 @@ export async function addRSIToTop10(top10, isPump = true) {
       console.log(`\n🔍 Đang tính RSI cho ${token.symbol} (${i + 1}/${top10.length})...`);
       const rsiInfo = await calculateRSIForToken(token.symbol, config.rsiTimeframes);
       
-      top10WithRSI.push({
+      const tokenWithRSI = {
         ...token,
         rsi: rsiInfo.rsiData,
         rsiConfluence: rsiInfo.confluence,
         rsiErrors: rsiInfo.errors,
-      });
+      };
+      
+      top10WithRSI.push(tokenWithRSI);
+      
+      // Gọi callback nếu có (để check và gửi signal alert ngay)
+      if (onTokenRSIComplete && typeof onTokenRSIComplete === 'function') {
+        try {
+          await onTokenRSIComplete(tokenWithRSI, i);
+        } catch (callbackError) {
+          console.warn(`⚠️  Lỗi trong callback onTokenRSIComplete cho ${token.symbol}:`, callbackError.message);
+        }
+      }
       
       // Delay nhỏ giữa các token để tránh rate limit
       if (i < top10.length - 1) {
@@ -357,7 +493,7 @@ export async function addRSIToTop10(top10, isPump = true) {
       }
     } catch (error) {
       console.error(`❌ Lỗi khi tính RSI cho ${token.symbol}: ${error.message}`);
-      top10WithRSI.push({
+      const tokenWithError = {
         ...token,
         rsi: {},
         rsiConfluence: {
@@ -367,7 +503,12 @@ export async function addRSIToTop10(top10, isPump = true) {
           count: 0,
         },
         rsiErrors: [{ error: error.message }],
-      });
+      };
+      
+      top10WithRSI.push(tokenWithError);
+      
+      // Không gọi callback cho token có lỗi (vì không có RSI data để check signal)
+      // Callback sẽ tự check và bỏ qua nếu không có RSI data
       
       // Delay ngay cả khi có lỗi
       if (i < top10.length - 1) {

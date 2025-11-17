@@ -1,12 +1,7 @@
-/**
- * Bỏ đuôi _USDT hoặc _USDC trong symbol để so sánh
- * @param {string} symbol - Symbol gốc
- * @returns {string} Symbol đã bỏ đuôi
- */
-export function getBaseSymbol(symbol) {
-  if (!symbol) return '';
-  return symbol.replace(/_USDT$|_USDC$/, '');
-}
+import { getBaseSymbol } from './symbolUtils.js';
+
+// Re-export để giữ backward compatibility
+export { getBaseSymbol };
 
 /**
  * Kiểm tra xem giờ hiện tại có nằm trong khung giờ im lặng (23h-1h) không
@@ -195,14 +190,14 @@ export function detectRSIConfluenceIncrease(currentTop10, previousData, isPumpAl
     // Điều kiện 1: Có ít nhất 1 timeframe lớn trong confluence hiện tại
     const hasLargeTF = hasLargeTimeframeInConfluence(currentConfluence);
     
-    // Điều kiện 2: Có ít nhất 3 RSI quá bán/quá mua tùy theo loại alert
+    // Điều kiện 2: Có ít nhất 2 RSI quá bán/quá mua tùy theo loại alert
     let hasMinRSI = false;
     if (isPumpAlert) {
-      // Pump: cần ít nhất 3 RSI quá bán (oversold)
-      hasMinRSI = currentConfluence.status === 'oversold' && currentCount >= 3;
+      // Pump: cần ít nhất 2 RSI quá bán (oversold)
+      hasMinRSI = currentConfluence.status === 'oversold' && currentCount >= 2;
     } else {
-      // Drop: cần ít nhất 3 RSI quá mua (overbought)
-      hasMinRSI = currentConfluence.status === 'overbought' && currentCount >= 3;
+      // Drop: cần ít nhất 2 RSI quá mua (overbought)
+      hasMinRSI = currentConfluence.status === 'overbought' && currentCount >= 2;
     }
 
     // Alert nếu thỏa một trong hai điều kiện

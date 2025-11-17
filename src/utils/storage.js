@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { config } from './config.js';
+import { config } from '../config.js';
 
 /**
  * Đảm bảo thư mục data tồn tại
@@ -17,14 +17,28 @@ async function ensureDataDir() {
  * Lưu top 10 vào file JSON
  * @param {Array} top10 - Top 10 token
  * @param {Array} top1Whitelist - Whitelist top 1 (chỉ 3 gần nhất)
+ * @param {Object} lastSignalAlerts - Object chứa signal alerts đã gửi gần nhất (optional)
  */
-export async function saveTop10(top10, top1Whitelist = null) {
+export async function saveTop10(top10, top1Whitelist = null, lastSignalAlerts = null) {
   await ensureDataDir();
+
+  // Load dữ liệu hiện tại để giữ lại lastSignalAlerts nếu không được truyền vào
+  let existingData = null;
+  if (lastSignalAlerts === null) {
+    try {
+      existingData = await loadTop10();
+    } catch (error) {
+      // Ignore error, sẽ tạo mới
+    }
+  }
 
   const data = {
     timestamp: new Date().toISOString(),
     top10: top10,
     top1Whitelist: top1Whitelist || [],
+    lastSignalAlerts: lastSignalAlerts !== null 
+      ? lastSignalAlerts 
+      : (existingData?.lastSignalAlerts || {}),
   };
 
   try {
