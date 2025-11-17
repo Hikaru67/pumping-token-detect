@@ -69,6 +69,31 @@ export const config = {
   
   // Signal Alert Configuration
   signalAlertMinRSICount: parseInt(process.env.SIGNAL_ALERT_MIN_RSI_COUNT || '3', 10), // Số lượng RSI overbought/oversold tối thiểu để trigger signal alert
+
+  // Single Signal Scoring Configuration
+  singleSignalScore: {
+    rsiMaxScore: parseFloat(process.env.SINGLE_SIGNAL_RSI_MAX_SCORE || '50'),
+    rsiWeightLarge: parseFloat(process.env.SINGLE_SIGNAL_RSI_WEIGHT_LARGE || '5'),
+    rsiWeightMedium: parseFloat(process.env.SINGLE_SIGNAL_RSI_WEIGHT_MEDIUM || '3.5'),
+    rsiWeightSmall: parseFloat(process.env.SINGLE_SIGNAL_RSI_WEIGHT_SMALL || '2.5'),
+    rsiLevel1: parseFloat(process.env.SINGLE_SIGNAL_RSI_LEVEL1 || '80'), // threshold 1
+    rsiLevel2: parseFloat(process.env.SINGLE_SIGNAL_RSI_LEVEL2 || '85'), // threshold 2
+    rsiLevelHigh: parseFloat(process.env.SINGLE_SIGNAL_RSI_LEVEL_HIGH || '90'), // high threshold for delta
+    rsiDelta: parseFloat(process.env.SINGLE_SIGNAL_RSI_DELTA || '0.8'),
+    rsiMaxMultiplier: parseFloat(process.env.SINGLE_SIGNAL_RSI_MAX_MULTIPLIER || '1.8'),
+    
+    divergenceMaxScore: parseFloat(process.env.SINGLE_SIGNAL_DIVERGENCE_MAX_SCORE || '20'),
+    divergenceWeightLarge: parseFloat(process.env.SINGLE_SIGNAL_DIVERGENCE_WEIGHT_LARGE || '10'),
+    divergenceWeightMedium: parseFloat(process.env.SINGLE_SIGNAL_DIVERGENCE_WEIGHT_MEDIUM || '6'),
+    divergenceWeightSmall: parseFloat(process.env.SINGLE_SIGNAL_DIVERGENCE_WEIGHT_SMALL || '3'),
+    divergenceBonusPerExtra: parseFloat(process.env.SINGLE_SIGNAL_DIVERGENCE_BONUS || '1'),
+    
+    candleMaxScore: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_MAX_SCORE || '30'),
+    candleWeightLarge: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_WEIGHT_LARGE || '15'),
+    candleWeightMedium: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_WEIGHT_MEDIUM || '9'),
+    candleWeightSmall: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_WEIGHT_SMALL || '4'),
+    candleBonusSpecial: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_BONUS || '3'),
+  },
 };
 
 // Validate required config

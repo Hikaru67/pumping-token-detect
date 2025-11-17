@@ -377,7 +377,7 @@ function formatSignalAlertMessage(signalTokens) {
  * @param {boolean} hasSuperOverbought - Flag để highlight khi có 3+ RSI >= SUPER_OVER_BOUGHT
  * @returns {string} Formatted message
  */
-function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSuperOverbought = false) {
+function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSuperOverbought = false, scoreInfo = null, metadata = {}) {
   if (!token || !token.symbol) {
     return '';
   }
@@ -449,7 +449,12 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
           : 'OVERBOUGHT CONFLUENCE ⬇️';
         const timeframesList = token.rsiConfluence.timeframes.map(tf => formatTimeframe(tf)).join(', ');
         
-        message += `${confluenceEmoji} *${confluenceText}* \\(${token.rsiConfluence.count} TFs: ${timeframesList}\\)\n`;
+        message += `${confluenceEmoji} *${confluenceText}* (${token.rsiConfluence.count} TFs: ${timeframesList})\n\n`;
+      }
+
+      if (scoreInfo && scoreInfo.components) {
+        const { total, components } = scoreInfo;
+        message += `🎯 Score: ${total.toFixed(1)}/100 (RSI ${components.rsi.toFixed(1)} | Div ${components.divergence.toFixed(1)} | Candle ${components.candle.toFixed(1)})\n`;
       }
       
       // Hiển thị timeframes có signal
@@ -457,11 +462,27 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
         const tfList = signalTimeframes.map(tf => formatTimeframe(tf)).join(', ');
         // Chỉ hiển thị "Tín hiệu đảo chiều" nếu thực sự có nến đảo chiều
         if (reason && reason.includes('Nến đảo chiều')) {
-          message += `🔄 *Tín hiệu đảo chiều:* ${tfList}\n\n`;
+          message += `🔄 *Tín hiệu đảo chiều:* ${tfList}\n`;
         } else {
           // Nếu là RSI tăng, hiển thị timeframes có RSI overbought/oversold
-          message += `📊 *RSI overbought:* ${tfList}\n\n`;
+          message += `📊 *RSI overbought:* ${tfList}\n`;
         }
+      }
+
+      const divergenceTFs = metadata.divergenceTimeframes || [];
+      if (divergenceTFs.length > 0) {
+        const tfList = divergenceTFs.map(tf => formatTimeframe(tf)).join(', ');
+        message += `📉 *Divergence:* ${tfList}\n`;
+      }
+
+      const candleTFs = metadata.candlestickTimeframes || [];
+      if (candleTFs.length > 0) {
+        const tfList = candleTFs.map(tf => formatTimeframe(tf)).join(', ');
+        message += `🕯️ *Nến đảo chiều:* ${tfList}\n`;
+      }
+
+      if (signalTimeframes && signalTimeframes.length > 0 || divergenceTFs.length > 0 || candleTFs.length > 0) {
+        message += '\n';
       }
     } else {
       message += `📊 RSI: ⚠️ Không có dữ liệu\n`;
@@ -511,7 +532,7 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
  * @param {boolean} hasSuperOverbought - Flag để highlight khi có 3+ RSI >= SUPER_OVER_BOUGHT
  * @returns {Promise<boolean>} true nếu gửi thành công ít nhất một destination
  */
-export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent = false, reason = '', hasSuperOverbought = false) {
+export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent = false, reason = '', hasSuperOverbought = false, scoreInfo = null, metadata = {}) {
   if (!config.telegramBotToken) {
     return false;
   }
@@ -530,7 +551,7 @@ export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent
   }
 
   try {
-    const message = formatSingleSignalMessage(token, signalTimeframes, reason, hasSuperOverbought);
+    const message = formatSingleSignalMessage(token, signalTimeframes, reason, hasSuperOverbought, scoreInfo, metadata);
     const disableNotification = forceSilent ? true : config.telegramDisableNotification;
     
     let channelSuccess = false;

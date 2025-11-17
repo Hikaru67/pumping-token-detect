@@ -5,7 +5,9 @@ import { saveTop10, loadTop10 } from '../utils/storage.js';
 import { detectTop1Change, getTop1ChangeInfo, updateTop1Whitelist, getBaseSymbol, getRSIConfluenceIncreaseInfo, isQuietHours } from '../utils/comparator.js';
 import { sendTelegramAlert, sendSingleSignalAlert } from '../telegram/telegramBot.js';
 import { checkReversalSignal } from '../indicators/candlestickPattern.js';
+import { checkRsiBullishDivergence } from '../indicators/divergence.js';
 import { config } from '../config.js';
+import { calculateSingleSignalScore } from '../utils/signalScoring.js';
 
 let isRunning = false;
 
@@ -159,7 +161,10 @@ async function checkPumpTokens() {
         reason: '',
         timeframes: [],
         hasSuperOverbought: hasSuperOverbought, // Flag để highlight
-        superOverboughtCount: superOverboughtCount
+        superOverboughtCount: superOverboughtCount,
+        candlestickTimeframes: [],
+        divergenceTimeframes: [],
+        scoring: null,
       };
 
       // Check 1: Có nến đảo chiều không?
@@ -178,12 +183,30 @@ async function checkPumpTokens() {
         result.shouldSend = true;
         result.reason = 'Nến đảo chiều';
         result.timeframes = signalResult.timeframes;
+        result.candlestickTimeframes = signalResult.timeframes;
         console.log(`   🚨 [${tokenWithRSI.symbol}] ✅ Tín hiệu đảo chiều tại: ${signalResult.timeframes.join(', ')}`);
       } else {
         console.log(`   ⏭️  [${tokenWithRSI.symbol}] Không có nến đảo chiều`);
       }
 
-      // Check 2: Số lượng RSI overbought/oversold có tăng không?
+      // Check 2: RSI có phân kỳ không? (bullish divergence)
+      console.log(`   🔍 [${tokenWithRSI.symbol}] Đang check RSI bullish divergence cho: ${targetTimeframes.join(', ')}`);
+      const divergenceResult = await checkRsiBullishDivergence(tokenWithRSI, targetTimeframes);
+
+      if (divergenceResult.hasDivergence && divergenceResult.timeframes.length > 0) {
+        result.shouldSend = true;
+        result.divergenceTimeframes = divergenceResult.timeframes;
+        if (result.reason) {
+          result.reason += ' + RSI divergence';
+        } else {
+          result.reason = 'RSI divergence';
+        }
+        console.log(`   📉 [${tokenWithRSI.symbol}] ✅ RSI bullish divergence tại: ${divergenceResult.timeframes.join(', ')}`);
+      } else {
+        console.log(`   ⏭️  [${tokenWithRSI.symbol}] Không có RSI bullish divergence`);
+      }
+
+      // Check 3: Số lượng RSI overbought/oversold có tăng không?
       if (countIncreased) {
         result.shouldSend = true;
         if (result.reason) {
@@ -198,13 +221,14 @@ async function checkPumpTokens() {
           result.timeframes = isPump 
             ? getOverboughtTimeframes(tokenWithRSI.rsi)
             : getOversoldTimeframes(tokenWithRSI.rsi);
+          result.rsiSignalTimeframes = result.timeframes;
           console.log(`   📊 [${tokenWithRSI.symbol}] Lấy tất cả timeframes có RSI ${statusType}: ${result.timeframes.join(', ')}`);
         }
       } else {
         console.log(`   ⏭️  [${tokenWithRSI.symbol}] RSI ${statusType} không tăng (${previousCount} → ${currentCount})`);
       }
 
-      // Check 3: Kiểm tra xem signal có giống với lần gần nhất không?
+      // Check 4: Kiểm tra xem signal có giống với lần gần nhất không?
       if (result.shouldSend && result.timeframes.length > 0) {
         const isSame = isSameAsLastSignal(tokenWithRSI.symbol, result.timeframes, lastSignalAlerts);
         if (isSame) {
@@ -219,6 +243,19 @@ async function checkPumpTokens() {
         if (!result.shouldSend) reasons.push('Không thỏa điều kiện');
         if (result.timeframes.length === 0) reasons.push('Không có timeframes');
         console.log(`   ❌ [${tokenWithRSI.symbol}] Không gửi alert: ${reasons.join(', ')}`);
+      }
+
+      if (result.shouldSend) {
+        result.scoring = calculateSingleSignalScore({
+          rsiData: tokenWithRSI.rsi,
+          candlestickTimeframes: result.candlestickTimeframes || [],
+          divergenceTimeframes: result.divergenceTimeframes || [],
+        });
+
+        if (result.scoring) {
+          const { total, components } = result.scoring;
+          console.log(`   🎯 [${tokenWithRSI.symbol}] Score: ${total.toFixed(1)} (RSI ${components.rsi.toFixed(1)} | Div ${components.divergence.toFixed(1)} | Candle ${components.candle.toFixed(1)})`);
+        }
       }
 
       return result;
@@ -253,7 +290,12 @@ async function checkPumpTokens() {
             signalCheck.timeframes, 
             isQuietHoursMode,
             signalCheck.reason, // Truyền reason để format message đúng
-            signalCheck.hasSuperOverbought // Truyền flag highlight
+            signalCheck.hasSuperOverbought, // Truyền flag highlight
+            signalCheck.scoring || null,
+            {
+              candlestickTimeframes: signalCheck.candlestickTimeframes || [],
+              divergenceTimeframes: signalCheck.divergenceTimeframes || [],
+            }
           );
           if (sendSuccess) {
             console.log(`   ✅ Đã gửi signal alert cho ${tokenWithRSI.symbol} (Lý do: ${signalCheck.reason})`);
