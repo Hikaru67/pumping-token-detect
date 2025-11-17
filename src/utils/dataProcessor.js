@@ -196,7 +196,7 @@ async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
  * @param {Array} data - Dữ liệu từ API
  * @returns {Array} Top 10 token có riseFallRate cao nhất
  */
-export function getTop10PumpTokens(data) {
+export function getTop10PumpTokens(data, limit = 10) {
   if (!Array.isArray(data)) {
     throw new Error('Dữ liệu đầu vào phải là array');
   }
@@ -250,7 +250,7 @@ export function getTop10PumpTokens(data) {
   const sortedTokens = uniqueTokens.sort((a, b) => b.riseFallRate - a.riseFallRate);
 
   // Lấy top 10 và thêm rank (chưa có RSI) - PUMP TOKENS
-  const top10WithoutRSI = sortedTokens.slice(0, 10).map((token, index) => ({
+  const topList = sortedTokens.slice(0, limit).map((token, index) => ({
     rank: index + 1,
     symbol: token.symbol,
     riseFallRate: parseFloat(token.riseFallRate.toFixed(4)),
@@ -263,7 +263,7 @@ export function getTop10PumpTokens(data) {
     fundingRate: parseFundingRate(token.fundingRate),
   }));
 
-  return top10WithoutRSI;
+  return topList;
 }
 
 /**

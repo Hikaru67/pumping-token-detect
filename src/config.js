@@ -29,6 +29,7 @@ export const config = {
   // Scheduler
   cronSchedule: process.env.CRON_SCHEDULE || '*/1 * * * *', // Mỗi 1 phút
   cronScheduleDrop: process.env.CRON_SCHEDULE_DROP || '*/1 * * * *', // Mỗi 1 phút (có thể config riêng)
+  pumpCandidateLimit: parseInt(process.env.PUMP_CANDIDATE_LIMIT || '15', 10),
   
   // Storage
   dataDir: process.env.DATA_DIR || './data',

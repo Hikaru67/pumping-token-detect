@@ -32,17 +32,19 @@ async function checkPumpTokens() {
     const apiData = await fetchTickerData();
     console.log(`✅ Đã lấy ${apiData.length} tokens từ API`);
 
-    // 2. Xử lý và tính toán top 10
-    console.log('🔢 Đang tính toán riseFallRate và lọc top 10...');
-    const top10WithoutRSI = getTop10PumpTokens(apiData);
+    const pumpCandidateLimit = config.pumpCandidateLimit || 10;
+
+    // 2. Xử lý và tính toán top candidates
+    console.log(`🔢 Đang tính toán riseFallRate và lọc top ${pumpCandidateLimit} candidates...`);
+    const topCandidates = getTop10PumpTokens(apiData, pumpCandidateLimit);
     
-    if (top10WithoutRSI.length === 0) {
+    if (topCandidates.length === 0) {
       console.warn('⚠️  Không có token nào để hiển thị');
       return;
     }
     
-    console.log('✅ Đã tính toán top 10 (theo RiseFallRate):');
-    top10WithoutRSI.forEach(token => {
+    console.log(`✅ Đã tính toán top ${pumpCandidateLimit} (theo RiseFallRate):`);
+    topCandidates.forEach(token => {
       const percent = (token.riseFallRate * 100).toFixed(2);
       const sign = token.riseFallRate >= 0 ? '+' : '';
       console.log(`   ${token.rank}. ${token.symbol} - ${sign}${percent}%`);
@@ -262,7 +264,7 @@ async function checkPumpTokens() {
     };
 
     // 3. Tính RSI cho top 10 tokens và check signal alert ngay khi tính xong mỗi token
-    console.log('\n📊 Đang tính RSI cho top 10 tokens...');
+    console.log(`\n📊 Đang tính RSI cho top ${pumpCandidateLimit} tokens...`);
     
     // Callback để check và gửi signal alert ngay khi tính RSI xong cho mỗi token
     const onTokenRSIComplete = async (tokenWithRSI, index) => {
@@ -308,7 +310,8 @@ async function checkPumpTokens() {
       }
     };
     
-    const top10 = await addRSIToTop10(top10WithoutRSI, true, onTokenRSIComplete); // true = pump alert
+    const topCandidatesWithRSI = await addRSIToTop10(topCandidates, true, onTokenRSIComplete); // true = pump alert
+    const top10 = topCandidatesWithRSI.slice(0, 10);
     
     // Log RSI confluence nếu có
     top10.forEach(token => {
