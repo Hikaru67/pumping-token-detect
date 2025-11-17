@@ -65,6 +65,7 @@ export const config = {
   
   // RSI Concurrent Configuration (để tính song song)
   rsiMaxConcurrentTimeframes: parseInt(process.env.RSI_MAX_CONCURRENT_TIMEFRAMES || '5', 10), // Số lượng timeframes tính song song tối đa cho 1 token
+  rsiMaxConcurrentTokens: parseInt(process.env.RSI_MAX_CONCURRENT_TOKENS || '2', 10), // Số lượng tokens tính song song tối đa
   
   // Signal Alert Configuration
   signalAlertMinRSICount: parseInt(process.env.SIGNAL_ALERT_MIN_RSI_COUNT || '3', 10), // Số lượng RSI overbought/oversold tối thiểu để trigger signal alert

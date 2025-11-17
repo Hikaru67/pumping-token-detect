@@ -483,6 +483,112 @@ function sortTop10ByRSI(top10, isPump = true) {
 }
 
 /**
+ * Tính RSI cho một token (wrapper function)
+ * @param {Object} token - Token object
+ * @param {number} index - Index của token trong array
+ * @param {number} total - Tổng số tokens
+ * @returns {Promise<Object>} Token với RSI data
+ */
+async function calculateRSIForTokenWrapper(token, index, total) {
+  try {
+    console.log(`\n🔍 Đang tính RSI cho ${token.symbol} (${index + 1}/${total})...`);
+    const rsiInfo = await calculateRSIForToken(token.symbol, config.rsiTimeframes);
+    
+    return {
+      ...token,
+      rsi: rsiInfo.rsiData,
+      rsiConfluence: rsiInfo.confluence,
+      rsiErrors: rsiInfo.errors,
+      _originalIndex: index, // Giữ index gốc để sắp xếp lại
+    };
+  } catch (error) {
+    console.error(`❌ Lỗi khi tính RSI cho ${token.symbol}: ${error.message}`);
+    return {
+      ...token,
+      rsi: {},
+      rsiConfluence: {
+        hasConfluence: false,
+        status: 'neutral',
+        timeframes: [],
+        count: 0,
+      },
+      rsiErrors: [{ error: error.message }],
+      _originalIndex: index,
+    };
+  }
+}
+
+/**
+ * Xử lý batch tokens với giới hạn concurrent
+ * @param {Array} tokens - Danh sách tokens cần tính RSI
+ * @param {number} maxConcurrent - Số lượng concurrent tối đa
+ * @param {Function} onTokenRSIComplete - Callback được gọi sau khi tính RSI xong cho mỗi token
+ * @returns {Promise<Array>} Kết quả tính RSI cho từng token
+ */
+async function processTokensBatch(tokens, maxConcurrent, onTokenRSIComplete) {
+  const results = [];
+  const total = tokens.length;
+  
+  // Xử lý từng batch
+  for (let i = 0; i < tokens.length; i += maxConcurrent) {
+    const batch = tokens.slice(i, i + maxConcurrent);
+    
+    // Tính song song trong batch
+    const batchPromises = batch.map((token, batchIndex) => 
+      calculateRSIForTokenWrapper(token, i + batchIndex, total)
+    );
+    const batchResults = await Promise.allSettled(batchPromises);
+    
+    // Xử lý kết quả batch
+    for (let j = 0; j < batchResults.length; j++) {
+      const result = batchResults[j];
+      let tokenWithRSI;
+      
+      if (result.status === 'fulfilled') {
+        tokenWithRSI = result.value;
+      } else {
+        // Lỗi khi gọi function
+        const token = batch[j];
+        tokenWithRSI = {
+          ...token,
+          rsi: {},
+          rsiConfluence: {
+            hasConfluence: false,
+            status: 'neutral',
+            timeframes: [],
+            count: 0,
+          },
+          rsiErrors: [{ error: result.reason?.message || 'Unknown error' }],
+          _originalIndex: i + j,
+        };
+      }
+      
+      results.push(tokenWithRSI);
+      
+      // Gọi callback nếu có (để check và gửi signal alert ngay)
+      if (onTokenRSIComplete && typeof onTokenRSIComplete === 'function') {
+        try {
+          await onTokenRSIComplete(tokenWithRSI, tokenWithRSI._originalIndex);
+        } catch (callbackError) {
+          console.warn(`⚠️  Lỗi trong callback onTokenRSIComplete cho ${tokenWithRSI.symbol}:`, callbackError.message);
+        }
+      }
+    }
+    
+    // Delay nhỏ giữa các batch để tránh rate limit
+    if (i + maxConcurrent < tokens.length) {
+      await delay(config.rsiDelayBetweenTokens || 200);
+    }
+  }
+  
+  // Sắp xếp lại theo index gốc để giữ thứ tự
+  results.sort((a, b) => (a._originalIndex || 0) - (b._originalIndex || 0));
+  
+  // Xóa _originalIndex trước khi trả về
+  return results.map(({ _originalIndex, ...token }) => token);
+}
+
+/**
  * Tính RSI cho top 10 tokens (song song để tăng tốc)
  * @param {Array} top10 - Top 10 tokens (chưa có RSI)
  * @param {boolean} isPump - true nếu là pump alert, false nếu là drop alert (mặc định: true)
@@ -496,63 +602,11 @@ export async function addRSIToTop10(top10, isPump = true, onTokenRSIComplete = n
 
   console.log(`📊 Đang tính RSI cho ${top10.length} tokens...`);
   console.log(`   Timeframes: ${config.rsiTimeframes.join(', ')}`);
+  console.log(`   Concurrent tokens: ${config.rsiMaxConcurrentTokens}`);
 
-  // Tính RSI cho từng token (tuần tự để tránh rate limit)
-  const top10WithRSI = [];
-  
-  for (let i = 0; i < top10.length; i++) {
-    const token = top10[i];
-    try {
-      console.log(`\n🔍 Đang tính RSI cho ${token.symbol} (${i + 1}/${top10.length})...`);
-      const rsiInfo = await calculateRSIForToken(token.symbol, config.rsiTimeframes);
-      
-      const tokenWithRSI = {
-        ...token,
-        rsi: rsiInfo.rsiData,
-        rsiConfluence: rsiInfo.confluence,
-        rsiErrors: rsiInfo.errors,
-      };
-      
-      top10WithRSI.push(tokenWithRSI);
-      
-      // Gọi callback nếu có (để check và gửi signal alert ngay)
-      if (onTokenRSIComplete && typeof onTokenRSIComplete === 'function') {
-        try {
-          await onTokenRSIComplete(tokenWithRSI, i);
-        } catch (callbackError) {
-          console.warn(`⚠️  Lỗi trong callback onTokenRSIComplete cho ${token.symbol}:`, callbackError.message);
-        }
-      }
-      
-      // Delay nhỏ giữa các token để tránh rate limit
-      if (i < top10.length - 1) {
-        await delay(config.rsiDelayBetweenTokens || 200);
-      }
-    } catch (error) {
-      console.error(`❌ Lỗi khi tính RSI cho ${token.symbol}: ${error.message}`);
-      const tokenWithError = {
-        ...token,
-        rsi: {},
-        rsiConfluence: {
-          hasConfluence: false,
-          status: 'neutral',
-          timeframes: [],
-          count: 0,
-        },
-        rsiErrors: [{ error: error.message }],
-      };
-      
-      top10WithRSI.push(tokenWithError);
-      
-      // Không gọi callback cho token có lỗi (vì không có RSI data để check signal)
-      // Callback sẽ tự check và bỏ qua nếu không có RSI data
-      
-      // Delay ngay cả khi có lỗi
-      if (i < top10.length - 1) {
-        await delay(config.rsiDelayBetweenTokens || 200);
-      }
-    }
-  }
+  // Tính RSI cho tokens theo batch với giới hạn concurrent
+  const maxConcurrent = config.rsiMaxConcurrentTokens;
+  const top10WithRSI = await processTokensBatch(top10, maxConcurrent, onTokenRSIComplete);
 
   console.log('\n✅ Đã tính RSI cho tất cả tokens');
   
