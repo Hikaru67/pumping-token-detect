@@ -379,9 +379,10 @@ function formatSignalAlertMessage(signalTokens) {
  * @param {Object} token - Token object
  * @param {Array<string>} signalTimeframes - Các timeframes có signal
  * @param {string} reason - Lý do alert (optional, để phân biệt nến đảo chiều hay RSI tăng)
+ * @param {boolean} hasSuperOverbought - Flag để highlight khi có 3+ RSI >= SUPER_OVER_BOUGHT
  * @returns {string} Formatted message
  */
-function formatSingleSignalMessage(token, signalTimeframes, reason = '') {
+function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSuperOverbought = false) {
   if (!token || !token.symbol) {
     return '';
   }
@@ -398,6 +399,12 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '') {
   });
   
   let message = ``;
+  
+  // Highlight nếu có 3+ RSI >= SUPER_OVER_BOUGHT
+  if (hasSuperOverbought) {
+    message += `🔥 *⚡ SUPER OVERBOUGHT ⚡*\n`;
+  }
+  
   message += `*$${cleanSymbolName}*\n`;
   
   // Hiển thị đầy đủ tất cả RSI timeframes (giống format alert thông thường)
@@ -506,9 +513,10 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '') {
  * @param {Array<string>} signalTimeframes - Các timeframes có signal
  * @param {boolean} forceSilent - Bắt buộc gửi ở chế độ im lặng
  * @param {string} reason - Lý do alert (optional, để format message đúng)
+ * @param {boolean} hasSuperOverbought - Flag để highlight khi có 3+ RSI >= SUPER_OVER_BOUGHT
  * @returns {Promise<boolean>} true nếu gửi thành công ít nhất một destination
  */
-export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent = false, reason = '') {
+export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent = false, reason = '', hasSuperOverbought = false) {
   if (!config.telegramBotToken) {
     return false;
   }
@@ -527,7 +535,7 @@ export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent
   }
 
   try {
-    const message = formatSingleSignalMessage(token, signalTimeframes, reason);
+    const message = formatSingleSignalMessage(token, signalTimeframes, reason, hasSuperOverbought);
     const disableNotification = forceSilent ? true : config.telegramDisableNotification;
     
     let channelSuccess = false;

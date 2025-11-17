@@ -320,6 +320,27 @@ export function getOverboughtTimeframes(rsiData, targetTimeframes = null) {
 }
 
 /**
+ * Đếm số lượng timeframes có RSI >= SUPER_OVER_BOUGHT threshold
+ * @param {Object} rsiData - Object chứa RSI của các timeframes
+ * @returns {number} Số lượng timeframes có RSI >= SUPER_OVER_BOUGHT threshold
+ */
+export function countSuperOverboughtRSI(rsiData) {
+  if (!rsiData || typeof rsiData !== 'object') {
+    return 0;
+  }
+
+  const superOverboughtThreshold = config.rsiSuperOverboughtThreshold;
+  let count = 0;
+  for (const [tf, rsi] of Object.entries(rsiData)) {
+    if (rsi !== null && !isNaN(rsi) && rsi >= superOverboughtThreshold) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+/**
  * Tính tổng SUM giá trị RSI theo status (overbought hoặc oversold)
  * @param {Object} rsiData - Object chứa RSI của các timeframes
  * @param {string} status - 'overbought' hoặc 'oversold'

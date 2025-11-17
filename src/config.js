@@ -54,6 +54,7 @@ export const config = {
   rsiOversoldThreshold: parseFloat(process.env.RSI_OVERSOLD_THRESHOLD || '30', 10),
   rsiOverboughtThreshold: parseFloat(process.env.RSI_OVERBOUGHT_THRESHOLD || '70', 10), // Cho khung lớn (hours/days)
   rsiOverboughtThresholdSmall: parseFloat(process.env.RSI_OVERBOUGHT_THRESHOLD_SMALL || '70', 10), // Cho khung bé (minutes)
+  rsiSuperOverboughtThreshold: parseFloat(process.env.RSI_SUPER_OVER_BOUGHT || '90', 10), // RSI siêu overbought (highlight signal)
   
   // Số lượng timeframes cần có confluence (mặc định: ít nhất 2 timeframes)
   rsiConfluenceMinTimeframes: parseInt(process.env.RSI_CONFLUENCE_MIN_TIMEFRAMES || '2', 10),

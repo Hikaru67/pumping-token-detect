@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { fetchTickerData } from '../api/apiClient.js';
-import { getTop10PumpTokens, addRSIToTop10, countRSIOverboughtOversold, getOversoldTimeframes, getOverboughtTimeframes } from '../utils/dataProcessor.js';
+import { getTop10PumpTokens, addRSIToTop10, countRSIOverboughtOversold, getOversoldTimeframes, getOverboughtTimeframes, countSuperOverboughtRSI } from '../utils/dataProcessor.js';
 import { saveTop10, loadTop10 } from '../utils/storage.js';
 import { detectTop1Change, getTop1ChangeInfo, updateTop1Whitelist, getBaseSymbol, getRSIConfluenceIncreaseInfo, isQuietHours } from '../utils/comparator.js';
 import { sendTelegramAlert, sendSingleSignalAlert } from '../telegram/telegramBot.js';
@@ -145,10 +145,21 @@ async function checkPumpTokens() {
         return { shouldSend: false, reason: `Chỉ có ${currentCount} RSI ${statusType}, cần tối thiểu ${minRequiredCount}`, timeframes: [] };
       }
 
+      // Kiểm tra có 3 mốc RSI >= SUPER_OVER_BOUGHT không (để highlight)
+      const superOverboughtCount = isPump 
+        ? countSuperOverboughtRSI(tokenWithRSI.rsi)
+        : 0; // Chỉ check cho pump alert
+      const hasSuperOverbought = superOverboughtCount >= 3;
+      if (hasSuperOverbought) {
+        console.log(`   🔥 [${tokenWithRSI.symbol}] ⚡ SUPER OVERBOUGHT: ${superOverboughtCount} timeframes có RSI >= ${config.rsiSuperOverboughtThreshold}`);
+      }
+
       const result = {
         shouldSend: false,
         reason: '',
-        timeframes: []
+        timeframes: [],
+        hasSuperOverbought: hasSuperOverbought, // Flag để highlight
+        superOverboughtCount: superOverboughtCount
       };
 
       // Check 1: Có nến đảo chiều không?
@@ -241,7 +252,8 @@ async function checkPumpTokens() {
             tokenWithRSI, 
             signalCheck.timeframes, 
             isQuietHoursMode,
-            signalCheck.reason // Truyền reason để format message đúng
+            signalCheck.reason, // Truyền reason để format message đúng
+            signalCheck.hasSuperOverbought // Truyền flag highlight
           );
           if (sendSuccess) {
             console.log(`   ✅ Đã gửi signal alert cho ${tokenWithRSI.symbol} (Lý do: ${signalCheck.reason})`);
