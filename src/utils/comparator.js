@@ -1,12 +1,7 @@
-/**
- * Bỏ đuôi _USDT hoặc _USDC trong symbol để so sánh
- * @param {string} symbol - Symbol gốc
- * @returns {string} Symbol đã bỏ đuôi
- */
-export function getBaseSymbol(symbol) {
-  if (!symbol) return '';
-  return symbol.replace(/_USDT$|_USDC$/, '');
-}
+import { getBaseSymbol } from './symbolUtils.js';
+
+// Re-export để giữ backward compatibility
+export { getBaseSymbol };
 
 /**
  * Kiểm tra xem giờ hiện tại có nằm trong khung giờ im lặng (23h-1h) không

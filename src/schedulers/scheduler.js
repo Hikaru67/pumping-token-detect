@@ -138,8 +138,8 @@ async function checkPumpTokens() {
       const countIncreased = currentCount > previousCount;
       console.log(`   📈 [${tokenWithRSI.symbol}] RSI ${statusType} tăng: ${countIncreased ? '✅ Có' : '❌ Không'}`);
       
-      // Kiểm tra token có tối thiểu 3 RSI overbought/oversold (điều kiện bắt buộc)
-      const minRequiredCount = 3;
+      // Kiểm tra token có tối thiểu N RSI overbought/oversold (điều kiện bắt buộc)
+      const minRequiredCount = config.signalAlertMinRSICount;
       if (currentCount < minRequiredCount) {
         console.log(`   ⏭️  [${tokenWithRSI.symbol}] Bỏ qua: Chỉ có ${currentCount} RSI ${statusType}, cần tối thiểu ${minRequiredCount}`);
         return { shouldSend: false, reason: `Chỉ có ${currentCount} RSI ${statusType}, cần tối thiểu ${minRequiredCount}`, timeframes: [] };

@@ -1,16 +1,7 @@
 import { fetchKlineData } from '../api/apiClient.js';
 import { calculateRSI, checkRSIConfluence, formatTimeframe, getRSIStatus } from '../indicators/rsiCalculator.js';
 import { config } from '../config.js';
-
-/**
- * Bỏ đuôi _USDT hoặc _USDC trong symbol để so sánh
- * @param {string} symbol - Symbol gốc
- * @returns {string} Symbol đã bỏ đuôi
- */
-function getBaseSymbol(symbol) {
-  if (!symbol) return '';
-  return symbol.replace(/_USDT$|_USDC$/, '');
-}
+import { getBaseSymbol } from './symbolUtils.js';
 
 /**
  * Parse và format fundingRate từ token
@@ -452,38 +443,6 @@ function sortTop10ByRSI(top10, isPump = true) {
       rank: index + 1,
     };
   });
-}
-
-/**
- * Tính RSI cho một token (wrapper function)
- * @param {Object} token - Token object
- * @returns {Promise<Object>} Token với RSI data
- */
-async function calculateRSIForTokenWrapper(token) {
-  try {
-    console.log(`🔍 Đang tính RSI cho ${token.symbol}...`);
-    const rsiInfo = await calculateRSIForToken(token.symbol, config.rsiTimeframes);
-    
-    return {
-      ...token,
-      rsi: rsiInfo.rsiData,
-      rsiConfluence: rsiInfo.confluence,
-      rsiErrors: rsiInfo.errors,
-    };
-  } catch (error) {
-    console.error(`❌ Lỗi khi tính RSI cho ${token.symbol}: ${error.message}`);
-    return {
-      ...token,
-      rsi: {},
-      rsiConfluence: {
-        hasConfluence: false,
-        status: 'neutral',
-        timeframes: [],
-        count: 0,
-      },
-      rsiErrors: [{ error: error.message }],
-    };
-  }
 }
 
 /**

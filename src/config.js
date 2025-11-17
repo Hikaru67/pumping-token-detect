@@ -63,9 +63,8 @@ export const config = {
   rsiDelayBetweenTimeframes: parseInt(process.env.RSI_DELAY_BETWEEN_TIMEFRAMES || '100', 10), // Delay giữa các timeframes (ms)
   rsiDelayBetweenTokens: parseInt(process.env.RSI_DELAY_BETWEEN_TOKENS || '200', 10), // Delay giữa các tokens (ms)
   
-  // RSI Concurrent Configuration (để tránh rate limit)
-  rsiMaxConcurrentTimeframes: parseInt(process.env.RSI_MAX_CONCURRENT_TIMEFRAMES || '2', 10), // Số lượng timeframes xử lý song song tối đa
-  rsiMaxConcurrentTokens: parseInt(process.env.RSI_MAX_CONCURRENT_TOKENS || '3', 10), // Số lượng tokens xử lý song song tối đa
+  // Signal Alert Configuration
+  signalAlertMinRSICount: parseInt(process.env.SIGNAL_ALERT_MIN_RSI_COUNT || '3', 10), // Số lượng RSI overbought/oversold tối thiểu để trigger signal alert
 };
 
 // Validate required config
