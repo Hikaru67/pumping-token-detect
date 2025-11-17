@@ -378,9 +378,10 @@ function formatSignalAlertMessage(signalTokens) {
  * Format message cho một token có signal
  * @param {Object} token - Token object
  * @param {Array<string>} signalTimeframes - Các timeframes có signal
+ * @param {string} reason - Lý do alert (optional, để phân biệt nến đảo chiều hay RSI tăng)
  * @returns {string} Formatted message
  */
-function formatSingleSignalMessage(token, signalTimeframes) {
+function formatSingleSignalMessage(token, signalTimeframes, reason = '') {
   if (!token || !token.symbol) {
     return '';
   }
@@ -449,10 +450,16 @@ function formatSingleSignalMessage(token, signalTimeframes) {
         message += `${confluenceEmoji} *${confluenceText}* \\(${token.rsiConfluence.count} TFs: ${timeframesList}\\)\n`;
       }
       
-      // Hiển thị timeframes có signal đảo chiều (nổi bật)
+      // Hiển thị timeframes có signal
       if (signalTimeframes && signalTimeframes.length > 0) {
         const tfList = signalTimeframes.map(tf => formatTimeframe(tf)).join(', ');
-        message += `🔄 *Tín hiệu đảo chiều:* ${tfList}\n`;
+        // Chỉ hiển thị "Tín hiệu đảo chiều" nếu thực sự có nến đảo chiều
+        if (reason && reason.includes('Nến đảo chiều')) {
+          message += `🔄 *Tín hiệu đảo chiều:* ${tfList}\n`;
+        } else {
+          // Nếu là RSI tăng, hiển thị timeframes có RSI overbought/oversold
+          message += `📊 *Timeframes có RSI:* ${tfList}\n`;
+        }
       }
     } else {
       message += `📊 RSI: ⚠️ Không có dữ liệu\n`;
@@ -498,9 +505,10 @@ function formatSingleSignalMessage(token, signalTimeframes) {
  * @param {Object} token - Token object có tín hiệu đảo chiều
  * @param {Array<string>} signalTimeframes - Các timeframes có signal
  * @param {boolean} forceSilent - Bắt buộc gửi ở chế độ im lặng
+ * @param {string} reason - Lý do alert (optional, để format message đúng)
  * @returns {Promise<boolean>} true nếu gửi thành công ít nhất một destination
  */
-export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent = false) {
+export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent = false, reason = '') {
   if (!config.telegramBotToken) {
     return false;
   }
@@ -519,7 +527,7 @@ export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent
   }
 
   try {
-    const message = formatSingleSignalMessage(token, signalTimeframes);
+    const message = formatSingleSignalMessage(token, signalTimeframes, reason);
     const disableNotification = forceSilent ? true : config.telegramDisableNotification;
     
     let channelSuccess = false;

@@ -240,7 +240,8 @@ async function checkPumpTokens() {
           const sendSuccess = await sendSingleSignalAlert(
             tokenWithRSI, 
             signalCheck.timeframes, 
-            isQuietHoursMode
+            isQuietHoursMode,
+            signalCheck.reason // Truyền reason để format message đúng
           );
           if (sendSuccess) {
             console.log(`   ✅ Đã gửi signal alert cho ${tokenWithRSI.symbol} (Lý do: ${signalCheck.reason})`);
