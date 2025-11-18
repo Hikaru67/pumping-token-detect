@@ -129,5 +129,3 @@ export async function checkRsiBullishDivergence(token, timeframes = DEFAULT_TIME
     timeframes: divergenceTimeframes,
   };
 }
-
-

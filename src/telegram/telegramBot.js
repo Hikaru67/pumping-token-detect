@@ -61,12 +61,12 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
         }).join(', ');
         message += `⚠️ RSI confluence tăng: ${tokenList}\n\n`;
       } else {
-        message += '⚠️ RSI confluence tăng\n\n';
+        message += '⚠️ RSI confluence tăng\n';
       }
     } else if (alertReason.includes('Top 1 thay đổi')) {
-      message += '🔄 *🚨 TOP 1 THAY ĐỔI 🚨*\n\n';
+      message += '🔄 *🚨 TOP 1 THAY ĐỔI 🚨*\n';
     } else if (alertReason.includes('Lần đầu chạy')) {
-      message += '📝 *Lần đầu chạy*\n\n';
+      message += '📝 *Lần đầu chạy*\n';
     }
   } else {
     message += '\n';

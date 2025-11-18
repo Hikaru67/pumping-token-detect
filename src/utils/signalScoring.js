@@ -53,7 +53,7 @@ function getRsiDepthMultiplier(rsi) {
   return Math.min(multiplier, rsiMaxMultiplier);
 }
 
-function calculateRsiScore(rsiData = {}) {
+export function calculateRsiScore(rsiData = {}) {
   const {
     rsiMaxScore,
     rsiWeightLarge,
