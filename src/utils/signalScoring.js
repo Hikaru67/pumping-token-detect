@@ -1,5 +1,4 @@
 import { config } from '../config.js';
-import { getRSIStatus } from '../indicators/rsiCalculator.js';
 
 const LARGE_TIMEFRAMES = ['Day1', 'Week1', 'Hour8', 'Hour4'];
 const MEDIUM_TIMEFRAMES = ['Hour1', 'Min60', 'Min30'];
@@ -33,8 +32,16 @@ function getRsiDepthMultiplier(rsi) {
     rsiMaxMultiplier,
   } = config.singleSignalScore;
 
-  if (rsi < rsiLevel1) {
+  const neutralBaseline = 50;
+
+  if (rsi <= neutralBaseline) {
     return 0;
+  }
+
+  if (rsi < rsiLevel1) {
+    const range = Math.max(1, rsiLevel1 - neutralBaseline);
+    const ratio = (rsi - neutralBaseline) / range;
+    return Math.max(0, Math.min(1, ratio));
   }
 
   if (rsi < rsiLevel2) {
@@ -74,15 +81,11 @@ export function calculateRsiScore(rsiData = {}) {
       return;
     }
 
-    // Chỉ tính các khung RSI đang overbought (theo logic pump)
-    const status = getRSIStatus(rsi, timeframe);
-    if (status !== 'overbought') {
-      return;
-    }
-
     const weight = getWeightByGroup(weights, timeframe);
     const multiplier = getRsiDepthMultiplier(rsi);
-    score += weight * multiplier;
+    if (multiplier > 0) {
+      score += weight * multiplier;
+    }
   });
 
   return Math.min(score, rsiMaxScore);
