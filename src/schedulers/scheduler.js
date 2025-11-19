@@ -257,6 +257,14 @@ async function checkPumpTokens() {
         if (result.scoring) {
           const { total, components } = result.scoring;
           console.log(`   🎯 [${tokenWithRSI.symbol}] Score: ${total.toFixed(1)} (RSI ${components.rsi.toFixed(1)} | Div ${components.divergence.toFixed(1)} | Candle ${components.candle.toFixed(1)})`);
+          
+          // Kiểm tra tổng điểm có đạt threshold tối thiểu không
+          const minTotalScore = config.singleSignalMinTotalScore;
+          if (total < minTotalScore) {
+            console.log(`   ⏭️  [${tokenWithRSI.symbol}] Bỏ qua: Tổng điểm (${total.toFixed(1)}) < threshold tối thiểu (${minTotalScore})`);
+            result.shouldSend = false;
+            result.reason = `Tổng điểm (${total.toFixed(1)}) < threshold (${minTotalScore})`;
+          }
         }
       }
 

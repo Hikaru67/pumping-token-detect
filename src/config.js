@@ -70,6 +70,7 @@ export const config = {
   
   // Signal Alert Configuration
   signalAlertMinRSICount: parseInt(process.env.SIGNAL_ALERT_MIN_RSI_COUNT || '3', 10), // Số lượng RSI overbought/oversold tối thiểu để trigger signal alert
+  singleSignalMinTotalScore: parseFloat(process.env.SINGLE_SIGNAL_MIN_TOTAL_SCORE || '20', 10), // Tổng điểm tối thiểu để gửi single signal alert (default: 20)
 
   // Single Signal Scoring Configuration
   singleSignalScore: {
