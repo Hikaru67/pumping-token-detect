@@ -259,11 +259,14 @@ async function checkPumpTokens() {
           console.log(`   🎯 [${tokenWithRSI.symbol}] Score: ${total.toFixed(1)} (RSI ${components.rsi.toFixed(1)} | Div ${components.divergence.toFixed(1)} | Candle ${components.candle.toFixed(1)})`);
           
           // Kiểm tra tổng điểm có đạt threshold tối thiểu không
+          // Bỏ qua check nếu đạt điều kiện super overbought (>= 3 RSI super overbought)
           const minTotalScore = config.singleSignalMinTotalScore;
-          if (total < minTotalScore) {
+          if (total < minTotalScore && !hasSuperOverbought) {
             console.log(`   ⏭️  [${tokenWithRSI.symbol}] Bỏ qua: Tổng điểm (${total.toFixed(1)}) < threshold tối thiểu (${minTotalScore})`);
             result.shouldSend = false;
             result.reason = `Tổng điểm (${total.toFixed(1)}) < threshold (${minTotalScore})`;
+          } else if (hasSuperOverbought && total < minTotalScore) {
+            console.log(`   ✅ [${tokenWithRSI.symbol}] Bỏ qua check min score: Đạt điều kiện super overbought (${superOverboughtCount} RSI >= ${config.rsiSuperOverboughtThreshold})`);
           }
         }
       }
@@ -305,6 +308,7 @@ async function checkPumpTokens() {
             {
               candlestickTimeframes: signalCheck.candlestickTimeframes || [],
               divergenceTimeframes: signalCheck.divergenceTimeframes || [],
+              superOverboughtCount: signalCheck.superOverboughtCount || 0, // Truyền số lượng RSI super overbought
             }
           );
           if (sendSuccess) {

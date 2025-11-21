@@ -375,6 +375,7 @@ function formatSignalAlertMessage(signalTokens) {
  * @param {Array<string>} signalTimeframes - Các timeframes có signal
  * @param {string} reason - Lý do alert (optional, để phân biệt nến đảo chiều hay RSI tăng)
  * @param {boolean} hasSuperOverbought - Flag để highlight khi có 3+ RSI >= SUPER_OVER_BOUGHT
+ * @param {number} superOverboughtCount - Số lượng RSI super overbought (để hiển thị số sao)
  * @returns {string} Formatted message
  */
 function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSuperOverbought = false, scoreInfo = null, metadata = {}) {
@@ -397,7 +398,10 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
   
   // Highlight nếu có 3+ RSI >= SUPER_OVER_BOUGHT
   if (hasSuperOverbought) {
-    message += `🔥 *⚡ SUPER OVERBOUGHT ⚡*\n`;
+    const superOverboughtCount = metadata?.superOverboughtCount || 0;
+    // Từ 4 RSI super overbought trở lên thì thêm số sao tương ứng
+    const stars = superOverboughtCount >= 4 ? '⭐'.repeat(superOverboughtCount) : '';
+    message += `🔥 *⚡ SUPER OVERBOUGHT ⚡${stars}*\n`;
   }
   
   message += `*$${cleanSymbolName}*\n`;
@@ -462,7 +466,6 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
         const tfList = signalTimeframes.map(tf => formatTimeframe(tf)).join(', ');
         // Chỉ hiển thị "Tín hiệu đảo chiều" nếu thực sự có nến đảo chiều
         if (reason && reason.includes('Nến đảo chiều')) {
-          message += `🔄 *Tín hiệu đảo chiều:* ${tfList}\n`;
         } else {
           // Nếu là RSI tăng, hiển thị timeframes có RSI overbought/oversold
           message += `📊 *RSI overbought:* ${tfList}\n`;
