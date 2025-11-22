@@ -404,7 +404,12 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
     message += `🔥 *⚡ SUPER OVERBOUGHT ⚡${stars}*\n`;
   }
   
-  message += `*$${cleanSymbolName}*\n`;
+  // Hiển thị tên symbol với điểm bên phải nếu có
+  let symbolLine = `*$${cleanSymbolName}*`;
+  if (scoreInfo && scoreInfo.total !== undefined) {
+    symbolLine += ` ${scoreInfo.total.toFixed(1)}/100`;
+  }
+  message += `${symbolLine}\n`;
   
   // Hiển thị đầy đủ tất cả RSI timeframes (giống format alert thông thường)
   if (token.rsi && typeof token.rsi === 'object') {
