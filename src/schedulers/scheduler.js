@@ -5,7 +5,9 @@ import { saveTop10, loadTop10 } from '../utils/storage.js';
 import { detectTop1Change, getTop1ChangeInfo, updateTop1Whitelist, getBaseSymbol, getRSIConfluenceIncreaseInfo, isQuietHours } from '../utils/comparator.js';
 import { sendTelegramAlert, sendSingleSignalAlert } from '../telegram/telegramBot.js';
 import { checkReversalSignal } from '../indicators/candlestickPattern.js';
+import { checkRsiBullishDivergence } from '../indicators/divergence.js';
 import { config } from '../config.js';
+import { calculateSingleSignalScore } from '../utils/signalScoring.js';
 
 let isRunning = false;
 
@@ -30,17 +32,19 @@ async function checkPumpTokens() {
     const apiData = await fetchTickerData();
     console.log(`✅ Đã lấy ${apiData.length} tokens từ API`);
 
-    // 2. Xử lý và tính toán top 10
-    console.log('🔢 Đang tính toán riseFallRate và lọc top 10...');
-    const top10WithoutRSI = getTop10PumpTokens(apiData);
+    const pumpCandidateLimit = config.pumpCandidateLimit || 10;
+
+    // 2. Xử lý và tính toán top candidates
+    console.log(`🔢 Đang tính toán riseFallRate và lọc top ${pumpCandidateLimit} candidates...`);
+    const topCandidates = getTop10PumpTokens(apiData, pumpCandidateLimit);
     
-    if (top10WithoutRSI.length === 0) {
+    if (topCandidates.length === 0) {
       console.warn('⚠️  Không có token nào để hiển thị');
       return;
     }
     
-    console.log('✅ Đã tính toán top 10 (theo RiseFallRate):');
-    top10WithoutRSI.forEach(token => {
+    console.log(`✅ Đã tính toán top ${pumpCandidateLimit} (theo RiseFallRate):`);
+    topCandidates.forEach(token => {
       const percent = (token.riseFallRate * 100).toFixed(2);
       const sign = token.riseFallRate >= 0 ? '+' : '';
       console.log(`   ${token.rank}. ${token.symbol} - ${sign}${percent}%`);
@@ -159,7 +163,10 @@ async function checkPumpTokens() {
         reason: '',
         timeframes: [],
         hasSuperOverbought: hasSuperOverbought, // Flag để highlight
-        superOverboughtCount: superOverboughtCount
+        superOverboughtCount: superOverboughtCount,
+        candlestickTimeframes: [],
+        divergenceTimeframes: [],
+        scoring: null,
       };
 
       // Check 1: Có nến đảo chiều không?
@@ -178,12 +185,30 @@ async function checkPumpTokens() {
         result.shouldSend = true;
         result.reason = 'Nến đảo chiều';
         result.timeframes = signalResult.timeframes;
+        result.candlestickTimeframes = signalResult.timeframes;
         console.log(`   🚨 [${tokenWithRSI.symbol}] ✅ Tín hiệu đảo chiều tại: ${signalResult.timeframes.join(', ')}`);
       } else {
         console.log(`   ⏭️  [${tokenWithRSI.symbol}] Không có nến đảo chiều`);
       }
 
-      // Check 2: Số lượng RSI overbought/oversold có tăng không?
+      // Check 2: RSI có phân kỳ không? (bullish divergence)
+      console.log(`   🔍 [${tokenWithRSI.symbol}] Đang check RSI bullish divergence cho: ${targetTimeframes.join(', ')}`);
+      const divergenceResult = await checkRsiBullishDivergence(tokenWithRSI, targetTimeframes);
+
+      if (divergenceResult.hasDivergence && divergenceResult.timeframes.length > 0) {
+        result.shouldSend = true;
+        result.divergenceTimeframes = divergenceResult.timeframes;
+        if (result.reason) {
+          result.reason += ' + RSI divergence';
+        } else {
+          result.reason = 'RSI divergence';
+        }
+        console.log(`   📉 [${tokenWithRSI.symbol}] ✅ RSI bullish divergence tại: ${divergenceResult.timeframes.join(', ')}`);
+      } else {
+        console.log(`   ⏭️  [${tokenWithRSI.symbol}] Không có RSI bullish divergence`);
+      }
+
+      // Check 3: Số lượng RSI overbought/oversold có tăng không?
       if (countIncreased) {
         result.shouldSend = true;
         if (result.reason) {
@@ -198,13 +223,14 @@ async function checkPumpTokens() {
           result.timeframes = isPump 
             ? getOverboughtTimeframes(tokenWithRSI.rsi)
             : getOversoldTimeframes(tokenWithRSI.rsi);
+          result.rsiSignalTimeframes = result.timeframes;
           console.log(`   📊 [${tokenWithRSI.symbol}] Lấy tất cả timeframes có RSI ${statusType}: ${result.timeframes.join(', ')}`);
         }
       } else {
         console.log(`   ⏭️  [${tokenWithRSI.symbol}] RSI ${statusType} không tăng (${previousCount} → ${currentCount})`);
       }
 
-      // Check 3: Kiểm tra xem signal có giống với lần gần nhất không?
+      // Check 4: Kiểm tra xem signal có giống với lần gần nhất không?
       if (result.shouldSend && result.timeframes.length > 0) {
         const isSame = isSameAsLastSignal(tokenWithRSI.symbol, result.timeframes, lastSignalAlerts);
         if (isSame) {
@@ -221,11 +247,35 @@ async function checkPumpTokens() {
         console.log(`   ❌ [${tokenWithRSI.symbol}] Không gửi alert: ${reasons.join(', ')}`);
       }
 
+      if (result.shouldSend) {
+        result.scoring = calculateSingleSignalScore({
+          rsiData: tokenWithRSI.rsi,
+          candlestickTimeframes: result.candlestickTimeframes || [],
+          divergenceTimeframes: result.divergenceTimeframes || [],
+        });
+
+        if (result.scoring) {
+          const { total, components } = result.scoring;
+          console.log(`   🎯 [${tokenWithRSI.symbol}] Score: ${total.toFixed(1)} (RSI ${components.rsi.toFixed(1)} | Div ${components.divergence.toFixed(1)} | Candle ${components.candle.toFixed(1)})`);
+          
+          // Kiểm tra tổng điểm có đạt threshold tối thiểu không
+          // Bỏ qua check nếu đạt điều kiện super overbought (>= 3 RSI super overbought)
+          const minTotalScore = config.singleSignalMinTotalScore;
+          if (total < minTotalScore && !hasSuperOverbought) {
+            console.log(`   ⏭️  [${tokenWithRSI.symbol}] Bỏ qua: Tổng điểm (${total.toFixed(1)}) < threshold tối thiểu (${minTotalScore})`);
+            result.shouldSend = false;
+            result.reason = `Tổng điểm (${total.toFixed(1)}) < threshold (${minTotalScore})`;
+          } else if (hasSuperOverbought && total < minTotalScore) {
+            console.log(`   ✅ [${tokenWithRSI.symbol}] Bỏ qua check min score: Đạt điều kiện super overbought (${superOverboughtCount} RSI >= ${config.rsiSuperOverboughtThreshold})`);
+          }
+        }
+      }
+
       return result;
     };
 
     // 3. Tính RSI cho top 10 tokens và check signal alert ngay khi tính xong mỗi token
-    console.log('\n📊 Đang tính RSI cho top 10 tokens...');
+    console.log(`\n📊 Đang tính RSI cho top ${pumpCandidateLimit} tokens...`);
     
     // Callback để check và gửi signal alert ngay khi tính RSI xong cho mỗi token
     const onTokenRSIComplete = async (tokenWithRSI, index) => {
@@ -253,7 +303,13 @@ async function checkPumpTokens() {
             signalCheck.timeframes, 
             isQuietHoursMode,
             signalCheck.reason, // Truyền reason để format message đúng
-            signalCheck.hasSuperOverbought // Truyền flag highlight
+            signalCheck.hasSuperOverbought, // Truyền flag highlight
+            signalCheck.scoring || null,
+            {
+              candlestickTimeframes: signalCheck.candlestickTimeframes || [],
+              divergenceTimeframes: signalCheck.divergenceTimeframes || [],
+              superOverboughtCount: signalCheck.superOverboughtCount || 0, // Truyền số lượng RSI super overbought
+            }
           );
           if (sendSuccess) {
             console.log(`   ✅ Đã gửi signal alert cho ${tokenWithRSI.symbol} (Lý do: ${signalCheck.reason})`);
@@ -266,7 +322,8 @@ async function checkPumpTokens() {
       }
     };
     
-    const top10 = await addRSIToTop10(top10WithoutRSI, true, onTokenRSIComplete); // true = pump alert
+    const topCandidatesWithRSI = await addRSIToTop10(topCandidates, true, onTokenRSIComplete); // true = pump alert
+    const top10 = topCandidatesWithRSI.slice(0, 10);
     
     // Log RSI confluence nếu có
     top10.forEach(token => {

@@ -19,10 +19,16 @@ function isHammer(open, close, high, low) {
 
   if (range === 0) return false;
 
-  // Bóng dưới dài (ít nhất 2x thân) và bóng trên ngắn
-  return lowerShadow >= body * 2 && upperShadow <= body * 0.5;
+  // Hammer xuôi: bóng dưới dài (ít nhất 2x thân), bóng trên ngắn
+  const isRegularHammer = lowerShadow >= body * 2 && upperShadow <= body * 0.5;
+
+  // Hammer ngược: bóng trên dài (ít nhất 2x thân), bóng dưới ngắn
+  const isInvertedHammer = upperShadow >= body * 2 && lowerShadow <= body * 0.5;
+
+  return isRegularHammer || isInvertedHammer;
 }
 
+  
 /**
  * Kiểm tra nến có phải là Doji - tín hiệu đảo chiều
  * Doji: mở và đóng gần bằng nhau (thân rất nhỏ)
@@ -38,8 +44,8 @@ function isDoji(open, close, high, low) {
 
   if (range === 0) return false;
 
-  // Thân nhỏ hơn 5% của range
-  return body <= range * 0.05;
+  // Thân nhỏ hơn 20% của range
+  return body < range * 0.2;
 }
 
 /**
@@ -70,7 +76,7 @@ function isBullishEngulfing(candles) {
  * @param {Array} candles - Mảng các nến (ít nhất 2 nến)
  * @returns {boolean} true nếu có tín hiệu đảo chiều
  */
-function hasReversalSignal(candles) {
+export function hasReversalSignal(candles) {
   if (!Array.isArray(candles) || candles.length < 2) {
     return false;
   }
@@ -97,6 +103,92 @@ function hasReversalSignal(candles) {
 }
 
 /**
+ * Kiểm tra tín hiệu đảo chiều cho một timeframe cụ thể
+ * @param {string} symbol - Symbol của token
+ * @param {string} timeframe - Timeframe cần kiểm tra
+ * @returns {Promise<Object>} { timeframe, hasSignal: boolean }
+ */
+async function checkReversalSignalForTimeframe(symbol, timeframe) {
+  try {
+    // Lấy dữ liệu kline để kiểm tra pattern
+    const klineData = await fetchKlineData(symbol, timeframe, 10); // Chỉ cần 10 nến gần nhất
+    
+    if (!klineData || !klineData.close || !Array.isArray(klineData.close) || klineData.close.length < 2) {
+      return {
+        timeframe,
+        hasSignal: false,
+      };
+    }
+
+    // Tạo mảng candles từ kline data
+    // Bỏ nến cuối cùng (nến đang chạy/chưa đóng cửa) - chỉ dùng nến đã đóng
+    const candles = [];
+    const length = klineData.close.length;
+    // Chỉ lấy từ nến đầu tiên đến nến áp chót (bỏ nến cuối cùng)
+    const closedCandlesCount = length > 1 ? length - 1 : length;
+    
+    for (let i = 0; i < closedCandlesCount; i++) {
+      candles.push({
+        open: klineData.open[i],
+        close: klineData.close[i],
+        high: klineData.high[i],
+        low: klineData.low[i],
+      });
+    }
+
+    // Kiểm tra tín hiệu đảo chiều (chỉ dùng nến đã đóng)
+    const hasSignal = candles.length >= 2 && hasReversalSignal(candles);
+    
+    return {
+      timeframe,
+      hasSignal,
+    };
+  } catch (error) {
+    console.warn(`⚠️  Lỗi khi kiểm tra tín hiệu đảo chiều cho ${symbol} ${timeframe}:`, error.message);
+    return {
+      timeframe,
+      hasSignal: false,
+    };
+  }
+}
+
+/**
+ * Xử lý batch timeframes với giới hạn concurrent cho việc check reversal signal
+ * @param {Array<string>} timeframes - Danh sách timeframes cần kiểm tra
+ * @param {string} symbol - Symbol của token
+ * @param {number} maxConcurrent - Số lượng concurrent tối đa
+ * @returns {Promise<Array>} Kết quả check reversal signal cho từng timeframe
+ */
+async function processReversalSignalBatch(timeframes, symbol, maxConcurrent) {
+  const results = [];
+  
+  // Xử lý từng batch
+  for (let i = 0; i < timeframes.length; i += maxConcurrent) {
+    const batch = timeframes.slice(i, i + maxConcurrent);
+    
+    // Check song song trong batch
+    const batchPromises = batch.map(tf => checkReversalSignalForTimeframe(symbol, tf));
+    const batchResults = await Promise.allSettled(batchPromises);
+    
+    // Xử lý kết quả batch
+    for (let j = 0; j < batchResults.length; j++) {
+      const result = batchResults[j];
+      if (result.status === 'fulfilled') {
+        results.push(result.value);
+      } else {
+        // Lỗi khi gọi function
+        results.push({
+          timeframe: batch[j],
+          hasSignal: false,
+        });
+      }
+    }
+  }
+  
+  return results;
+}
+
+/**
  * Kiểm tra token có tín hiệu đảo chiều từ candlestick pattern
  * @param {Object} token - Token object có RSI data
  * @param {Array<string>} timeframes - Các timeframes cần kiểm tra (đã được filter RSI oversold trước đó)
@@ -114,46 +206,14 @@ export async function checkReversalSignal(token, timeframes = ['Min5', 'Min15', 
     return { hasSignal: false, timeframes: [] };
   }
 
-  const signalTimeframes = [];
+  // Kiểm tra song song cho các timeframes (với giới hạn concurrent)
+  const maxConcurrent = config.rsiMaxConcurrentTimeframes; // Dùng cùng config với RSI
+  const results = await processReversalSignalBatch(timeframes, token.symbol, maxConcurrent);
   
-  // Kiểm tra từng timeframe (đã được filter RSI oversold trước đó)
-  for (const timeframe of timeframes) {
-    try {
-      // Lấy dữ liệu kline để kiểm tra pattern
-      const klineData = await fetchKlineData(token.symbol, timeframe, 10); // Chỉ cần 10 nến gần nhất
-      
-      if (!klineData || !klineData.close || !Array.isArray(klineData.close) || klineData.close.length < 2) {
-        continue;
-      }
-
-      // Tạo mảng candles từ kline data
-      // Bỏ nến cuối cùng (nến đang chạy/chưa đóng cửa) - chỉ dùng nến đã đóng
-      const candles = [];
-      const length = klineData.close.length;
-      // Chỉ lấy từ nến đầu tiên đến nến áp chót (bỏ nến cuối cùng)
-      const closedCandlesCount = length > 1 ? length - 1 : length;
-      
-      for (let i = 0; i < closedCandlesCount; i++) {
-        candles.push({
-          open: klineData.open[i],
-          close: klineData.close[i],
-          high: klineData.high[i],
-          low: klineData.low[i],
-        });
-      }
-
-      // Kiểm tra tín hiệu đảo chiều (chỉ dùng nến đã đóng)
-      if (candles.length >= 2 && hasReversalSignal(candles)) {
-        signalTimeframes.push(timeframe);
-      }
-
-      // Delay nhỏ để tránh rate limit
-      await new Promise(resolve => setTimeout(resolve, 100));
-    } catch (error) {
-      console.warn(`⚠️  Lỗi khi kiểm tra tín hiệu đảo chiều cho ${token.symbol} ${timeframe}:`, error.message);
-      continue;
-    }
-  }
+  // Lọc các timeframes có signal
+  const signalTimeframes = results
+    .filter(r => r.hasSignal)
+    .map(r => r.timeframe);
 
   return {
     hasSignal: signalTimeframes.length > 0,

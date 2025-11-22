@@ -3,6 +3,7 @@ node_modules/
 
 # Environment variables
 .env
+.env.test
 
 # Data files
 data/
@@ -23,3 +24,6 @@ Thumbs.db
 *.swp
 *.swo
 
+# Tests outputs (manual or temporary)
+tests/
+docs
