@@ -94,28 +94,50 @@ export async function checkRsiBullishDivergence(token, timeframes = DEFAULT_TIME
       }
 
       const closedCloses = closes.slice(0, closes.length - 1);
+      console.log('🚀 ~ closedCloses:', closedCloses)
 
       const lows = findLastTwoLows(closedCloses);
+      console.log('🚀 ~ lows:', lows)
       if (!lows) {
         continue;
       }
 
       const { prevLowIndex, lastLowIndex } = lows;
 
-      const closesPrev = closedCloses.slice(0, prevLowIndex + 1);
-      const closesLast = closedCloses.slice(0, lastLowIndex + 1);
+      // Tính RSI tại từng điểm low
+      // RSI tại một điểm được tính từ dữ liệu trước đó (cần ít nhất period + 1 nến)
+      // Lấy dữ liệu từ đầu đến điểm low (bao gồm cả điểm low) để tính RSI tại điểm đó
+      const closesForPrevRSI = closedCloses.slice(0, prevLowIndex + 1);
+      const closesForLastRSI = closedCloses.slice(0, lastLowIndex + 1);
 
-      const rsiPrev = calculateRSI(closesPrev, config.rsiPeriod);
-      const rsiLast = calculateRSI(closesLast, config.rsiPeriod);
+      // Kiểm tra có đủ dữ liệu để tính RSI không (cần ít nhất period + 1 nến)
+      if (closesForPrevRSI.length < config.rsiPeriod + 1 || closesForLastRSI.length < config.rsiPeriod + 1) {
+        continue;
+      }
 
-      if (rsiPrev === null || rsiLast === null) {
+      // Tính RSI tại điểm prevLow (RSI của nến tại prevLowIndex)
+      // calculateRSI trả về RSI của nến cuối cùng trong mảng
+      const rsiPrev = calculateRSI(closesForPrevRSI, config.rsiPeriod);
+      // Tính RSI tại điểm lastLow (RSI của nến tại lastLowIndex)
+      const rsiLast = calculateRSI(closesForLastRSI, config.rsiPeriod);
+
+      if (rsiPrev === null || rsiLast === null || isNaN(rsiPrev) || isNaN(rsiLast)) {
         continue;
       }
 
       const pricePrev = closedCloses[prevLowIndex];
       const priceLast = closedCloses[lastLowIndex];
 
-      if (priceLast < pricePrev && rsiLast > rsiPrev) {
+      // Bullish divergence: giá giảm (priceLast < pricePrev) nhưng RSI tăng (rsiLast > rsiPrev)
+      // Điều này cho thấy momentum đang tăng mặc dù giá đang giảm, báo hiệu khả năng đảo chiều tăng
+      // Cần đảm bảo sự khác biệt đủ lớn để tránh false signals
+      const priceDiffPercent = ((priceLast - pricePrev) / pricePrev) * 100;
+      const rsiDiff = rsiLast - rsiPrev;
+      
+      // Chỉ xem là divergence nếu:
+      // 1. Giá giảm ít nhất 0.1% (tránh noise)
+      // 2. RSI tăng ít nhất 1 điểm (tránh noise)
+      if (priceLast < pricePrev && rsiLast > rsiPrev && priceDiffPercent < -0.1 && rsiDiff > 1) {
         divergenceTimeframes.push(timeframe);
       }
     } catch (error) {
