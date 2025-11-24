@@ -29,6 +29,7 @@ export const config = {
   // Scheduler
   cronSchedule: process.env.CRON_SCHEDULE || '*/1 * * * *', // Mỗi 1 phút
   cronScheduleDrop: process.env.CRON_SCHEDULE_DROP || '*/1 * * * *', // Mỗi 1 phút (có thể config riêng)
+  pumpCandidateLimit: parseInt(process.env.PUMP_CANDIDATE_LIMIT || '15', 10),
   
   // Storage
   dataDir: process.env.DATA_DIR || './data',
@@ -60,11 +61,41 @@ export const config = {
   rsiConfluenceMinTimeframes: parseInt(process.env.RSI_CONFLUENCE_MIN_TIMEFRAMES || '2', 10),
   
   // RSI Delay Configuration (để tránh rate limit)
-  rsiDelayBetweenTimeframes: parseInt(process.env.RSI_DELAY_BETWEEN_TIMEFRAMES || '100', 10), // Delay giữa các timeframes (ms)
+  rsiDelayBetweenTimeframes: parseInt(process.env.RSI_DELAY_BETWEEN_TIMEFRAMES || '100', 10), // Delay giữa các timeframes (ms) - không dùng khi tính song song
   rsiDelayBetweenTokens: parseInt(process.env.RSI_DELAY_BETWEEN_TOKENS || '200', 10), // Delay giữa các tokens (ms)
+  
+  // RSI Concurrent Configuration (để tính song song)
+  rsiMaxConcurrentTimeframes: parseInt(process.env.RSI_MAX_CONCURRENT_TIMEFRAMES || '5', 10), // Số lượng timeframes tính song song tối đa cho 1 token
+  rsiMaxConcurrentTokens: parseInt(process.env.RSI_MAX_CONCURRENT_TOKENS || '2', 10), // Số lượng tokens tính song song tối đa
   
   // Signal Alert Configuration
   signalAlertMinRSICount: parseInt(process.env.SIGNAL_ALERT_MIN_RSI_COUNT || '3', 10), // Số lượng RSI overbought/oversold tối thiểu để trigger signal alert
+  singleSignalMinTotalScore: parseFloat(process.env.SINGLE_SIGNAL_MIN_TOTAL_SCORE || '20', 10), // Tổng điểm tối thiểu để gửi single signal alert (default: 20)
+
+  // Single Signal Scoring Configuration
+  singleSignalScore: {
+    rsiMaxScore: parseFloat(process.env.SINGLE_SIGNAL_RSI_MAX_SCORE || '50'),
+    rsiWeightLarge: parseFloat(process.env.SINGLE_SIGNAL_RSI_WEIGHT_LARGE || '5'),
+    rsiWeightMedium: parseFloat(process.env.SINGLE_SIGNAL_RSI_WEIGHT_MEDIUM || '3.5'),
+    rsiWeightSmall: parseFloat(process.env.SINGLE_SIGNAL_RSI_WEIGHT_SMALL || '2.5'),
+    rsiLevel1: parseFloat(process.env.SINGLE_SIGNAL_RSI_LEVEL1 || '80'), // threshold 1
+    rsiLevel2: parseFloat(process.env.SINGLE_SIGNAL_RSI_LEVEL2 || '85'), // threshold 2
+    rsiLevelHigh: parseFloat(process.env.SINGLE_SIGNAL_RSI_LEVEL_HIGH || '90'), // high threshold for delta
+    rsiDelta: parseFloat(process.env.SINGLE_SIGNAL_RSI_DELTA || '0.8'),
+    rsiMaxMultiplier: parseFloat(process.env.SINGLE_SIGNAL_RSI_MAX_MULTIPLIER || '1.8'),
+    
+    divergenceMaxScore: parseFloat(process.env.SINGLE_SIGNAL_DIVERGENCE_MAX_SCORE || '20'),
+    divergenceWeightLarge: parseFloat(process.env.SINGLE_SIGNAL_DIVERGENCE_WEIGHT_LARGE || '10'),
+    divergenceWeightMedium: parseFloat(process.env.SINGLE_SIGNAL_DIVERGENCE_WEIGHT_MEDIUM || '6'),
+    divergenceWeightSmall: parseFloat(process.env.SINGLE_SIGNAL_DIVERGENCE_WEIGHT_SMALL || '3'),
+    divergenceBonusPerExtra: parseFloat(process.env.SINGLE_SIGNAL_DIVERGENCE_BONUS || '1'),
+    
+    candleMaxScore: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_MAX_SCORE || '30'),
+    candleWeightLarge: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_WEIGHT_LARGE || '15'),
+    candleWeightMedium: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_WEIGHT_MEDIUM || '9'),
+    candleWeightSmall: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_WEIGHT_SMALL || '4'),
+    candleBonusSpecial: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_BONUS || '3'),
+  },
 };
 
 // Validate required config
