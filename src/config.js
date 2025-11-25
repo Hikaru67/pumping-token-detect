@@ -6,6 +6,18 @@ export const config = {
   // MEXC API
   mexcApiUrl: process.env.MEXC_API_URL || 'https://futures.mexc.com/api/v1/contract/ticker',
   
+  // Binance API (public futures)
+  binanceApiBaseUrl: process.env.BINANCE_API_BASE_URL || 'https://fapi.binance.com',
+  binanceApiTimeout: parseInt(process.env.BINANCE_API_TIMEOUT || '10000', 10),
+  binanceExchangeInfoCacheMs: parseInt(process.env.BINANCE_EXCHANGE_INFO_CACHE_MS || '300000', 10), // 5 phút
+  
+  // BingX API
+  bingxApiBaseUrl: process.env.BINGX_BASE_URL || 'https://open-api.bingx.com',
+  bingxApiKey: process.env.BINGX_API_KEY || '',
+  bingxApiSecret: process.env.BINGX_API_SECRET || '',
+  bingxRecvWindow: parseInt(process.env.BINGX_RECV_WINDOW || '5000', 10),
+  bingxApiTimeout: parseInt(process.env.BINGX_API_TIMEOUT || '15000', 10),
+  
   // Telegram Bot - Pump Tokens
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
   telegramChatId: process.env.TELEGRAM_CHAT_ID || '', // Channel ID (channel riêng)
@@ -111,5 +123,10 @@ if (!config.telegramChatId && !config.telegramGroupId) {
 if (!config.telegramDropChatId) {
   console.warn('⚠️  Cảnh báo: TELEGRAM_DROP_CHAT_ID chưa được cấu hình!');
   console.warn('   Drop tokens sẽ không được gửi alert nếu không có channel này.');
+}
+
+if (!config.bingxApiKey || !config.bingxApiSecret) {
+  console.warn('ℹ️  Thông tin: BINGX_API_KEY/BINGX_API_SECRET chưa được cấu hình.');
+  console.warn('   Các request riêng tư tới BingX sẽ bị bỏ qua cho đến khi bạn cung cấp đủ thông tin.');
 }
 

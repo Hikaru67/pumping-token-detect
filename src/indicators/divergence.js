@@ -94,10 +94,8 @@ export async function checkRsiBullishDivergence(token, timeframes = DEFAULT_TIME
       }
 
       const closedCloses = closes.slice(0, closes.length - 1);
-      console.log('🚀 ~ closedCloses:', closedCloses)
 
       const lows = findLastTwoLows(closedCloses);
-      console.log('🚀 ~ lows:', lows)
       if (!lows) {
         continue;
       }

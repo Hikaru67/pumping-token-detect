@@ -2,6 +2,7 @@ import axios from 'axios';
 import { config } from '../config.js';
 import { formatTimeframe, getRSIStatus } from '../indicators/rsiCalculator.js';
 import { checkReversalSignal } from '../indicators/candlestickPattern.js';
+import { checkBinanceFuturesSymbol } from '../api/binanceService.js';
 
 /**
  * Bỏ đuôi _USDT hoặc _USDC trong symbol
@@ -378,7 +379,7 @@ function formatSignalAlertMessage(signalTokens) {
  * @param {number} superOverboughtCount - Số lượng RSI super overbought (để hiển thị số sao)
  * @returns {string} Formatted message
  */
-function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSuperOverbought = false, scoreInfo = null, metadata = {}) {
+function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSuperOverbought = false, scoreInfo = null, metadata = {}, binanceInfo = null) {
   if (!token || !token.symbol) {
     return '';
   }
@@ -524,7 +525,26 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
   if (token.volume24) {
     message += `📊 Volume 24h: ${formatNumber(token.volume24)}\n`;
   }
-  
+
+  const binanceStatusText = (() => {
+    if (!binanceInfo) {
+      return '⚠️ Không kiểm tra được';
+    }
+    if (typeof binanceInfo.exists === 'boolean') {
+      if (binanceInfo.exists) {
+        const contractType = binanceInfo.info?.contractType ? ` (${binanceInfo.info.contractType})` : '';
+        const symbolText = binanceInfo.symbol ? ` - ${binanceInfo.symbol}` : '';
+        return `✅ Có hợp đồng futures${symbolText}${contractType}`;
+      }
+      return '❌ Chưa có hợp đồng futures';
+    }
+    if (binanceInfo.error) {
+      return `⚠️ Không kiểm tra được (${binanceInfo.error})`;
+    }
+    return '⚠️ Không xác định';
+  })();
+
+  message += `🏦 Binance Futures: ${binanceStatusText}\n`;
   message += `\n⏰ ${timestamp}`;
   
   return message;
@@ -559,7 +579,23 @@ export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent
   }
 
   try {
-    const message = formatSingleSignalMessage(token, signalTimeframes, reason, hasSuperOverbought, scoreInfo, metadata);
+    let binanceInfo = null;
+    try {
+      binanceInfo = await checkBinanceFuturesSymbol(token.symbol);
+    } catch (binanceError) {
+      console.warn(`⚠️  Không thể kiểm tra Binance cho ${token.symbol}: ${binanceError.message}`);
+      binanceInfo = { exists: null, symbol: token.symbol, error: binanceError.message };
+    }
+
+    const message = formatSingleSignalMessage(
+      token,
+      signalTimeframes,
+      reason,
+      hasSuperOverbought,
+      scoreInfo,
+      metadata,
+      binanceInfo
+    );
     const disableNotification = forceSilent ? true : config.telegramDisableNotification;
     
     let channelSuccess = false;
