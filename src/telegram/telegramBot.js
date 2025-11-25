@@ -553,11 +553,14 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
 /**
  * Gửi signal alert cho một token riêng lẻ (gửi ngay khi phát hiện)
  * Gửi vào cả channel (TELEGRAM_CHAT_ID) và group topic (TELEGRAM_SIGNAL_TOPIC_ID) nếu có config
+ * Khi có RSI super overbought, sẽ gửi thêm vào primary signal destinations:
+ *   - TELEGRAM_PRIMARY_SIGNAL_CHAT_ID (channel riêng, optional)
+ *   - TELEGRAM_PRIMARY_SIGNAL_TOPIC_ID (topic trong cùng group với TELEGRAM_GROUP_ID)
  * @param {Object} token - Token object có tín hiệu đảo chiều
  * @param {Array<string>} signalTimeframes - Các timeframes có signal
  * @param {boolean} forceSilent - Bắt buộc gửi ở chế độ im lặng
  * @param {string} reason - Lý do alert (optional, để format message đúng)
- * @param {boolean} hasSuperOverbought - Flag để highlight khi có 3+ RSI >= SUPER_OVER_BOUGHT
+ * @param {boolean} hasSuperOverbought - Flag để highlight khi có 3+ RSI >= SUPER_OVER_BOUGHT (cũng trigger gửi vào primary signal destinations)
  * @returns {Promise<boolean>} true nếu gửi thành công ít nhất một destination
  */
 export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent = false, reason = '', hasSuperOverbought = false, scoreInfo = null, metadata = {}) {
@@ -572,8 +575,13 @@ export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent
   // Kiểm tra có ít nhất một destination để gửi
   const hasChannel = config.telegramChatId && config.telegramChatId.trim() !== '';
   const hasGroupTopic = config.telegramGroupId && config.telegramSignalTopicId;
+  
+  // Kiểm tra primary signal destinations (chỉ dùng khi có super overbought)
+  // Primary signal topic dùng chung group với signal thông thường (TELEGRAM_GROUP_ID)
+  const hasPrimaryChannel = hasSuperOverbought && config.telegramPrimarySignalChatId && config.telegramPrimarySignalChatId.trim() !== '';
+  const hasPrimaryGroupTopic = hasSuperOverbought && config.telegramGroupId && config.telegramPrimarySignalTopicId;
 
-  if (!hasChannel && !hasGroupTopic) {
+  if (!hasChannel && !hasGroupTopic && !hasPrimaryChannel && !hasPrimaryGroupTopic) {
     console.warn(`⚠️  Không có destination để gửi signal alert cho ${token.symbol}`);
     return false;
   }
@@ -600,6 +608,8 @@ export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent
     
     let channelSuccess = false;
     let topicSuccess = false;
+    let primaryChannelSuccess = false;
+    let primaryTopicSuccess = false;
 
     // Gửi vào channel nếu có config
     if (hasChannel) {
@@ -635,7 +645,42 @@ export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent
       }
     }
 
-    const overallSuccess = channelSuccess || topicSuccess;
+    // Gửi vào primary signal channel nếu có super overbought và có config
+    if (hasPrimaryChannel) {
+      try {
+        primaryChannelSuccess = await sendToTelegramChat(
+          config.telegramPrimarySignalChatId,
+          message,
+          null, // Channel không có topic
+          disableNotification
+        );
+        if (primaryChannelSuccess) {
+          console.log(`✅ Đã gửi primary signal alert (super overbought) cho ${token.symbol} vào channel ${config.telegramPrimarySignalChatId}`);
+        }
+      } catch (error) {
+        console.error(`❌ Lỗi khi gửi primary signal alert cho ${token.symbol} vào channel:`, error.message);
+      }
+    }
+
+    // Gửi vào primary signal group topic nếu có super overbought và có config
+    // Dùng chung group với signal thông thường (TELEGRAM_GROUP_ID)
+    if (hasPrimaryGroupTopic) {
+      try {
+        primaryTopicSuccess = await sendToTelegramChat(
+          config.telegramGroupId,
+          message,
+          config.telegramPrimarySignalTopicId,
+          disableNotification
+        );
+        if (primaryTopicSuccess) {
+          console.log(`✅ Đã gửi primary signal alert (super overbought) cho ${token.symbol} vào topic ${config.telegramPrimarySignalTopicId} trong group ${config.telegramGroupId}`);
+        }
+      } catch (error) {
+        console.error(`❌ Lỗi khi gửi primary signal alert cho ${token.symbol} vào topic:`, error.message);
+      }
+    }
+
+    const overallSuccess = channelSuccess || topicSuccess || primaryChannelSuccess || primaryTopicSuccess;
     if (!overallSuccess) {
       console.error(`❌ Không thể gửi signal alert cho ${token.symbol} vào bất kỳ destination nào`);
     }

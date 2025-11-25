@@ -30,6 +30,12 @@ export const config = {
     ? parseInt(process.env.TELEGRAM_SIGNAL_TOPIC_ID, 10) 
     : null, // Topic ID cho signal alerts (tín hiệu đảo chiều)
   
+  // Telegram Primary Signal (cho RSI super overbought - gửi song song với signal thông thường)
+  telegramPrimarySignalChatId: process.env.TELEGRAM_PRIMARY_SIGNAL_CHAT_ID || '', // Channel ID cho primary signal (optional)
+  telegramPrimarySignalTopicId: process.env.TELEGRAM_PRIMARY_SIGNAL_TOPIC_ID && process.env.TELEGRAM_PRIMARY_SIGNAL_TOPIC_ID.trim() !== '' 
+    ? parseInt(process.env.TELEGRAM_PRIMARY_SIGNAL_TOPIC_ID, 10) 
+    : null, // Topic ID cho primary signal alerts (RSI super overbought) - dùng chung group với TELEGRAM_GROUP_ID
+  
   // Telegram Bot - Drop Tokens
   telegramDropChatId: process.env.TELEGRAM_DROP_CHAT_ID || '', // Channel ID cho drop (channel riêng)
   telegramDropGroupId: process.env.TELEGRAM_DROP_GROUP_ID || '', // Group ID cho drop (để gửi vào topic)
