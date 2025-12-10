@@ -24,9 +24,9 @@ function convertIntervalForAPI(interval) {
 export async function fetchKlineData(symbol, interval, limit = 200) {
   try {
     // MEXC Futures API endpoint cho kline data
-    // Format: https://contract.mexc.com/api/v1/contract/kline/{symbol}?interval={interval}&limit={limit}
+    // Format: https://contract.mexc.co/api/v1/contract/kline/{symbol}?interval={interval}&limit={limit}
     // Response format: { success: true, data: { time: [...], open: [...], close: [...], high: [...], low: [...], vol: [...], amount: [...] } }
-    const url = `https://contract.mexc.com/api/v1/contract/kline/${symbol}`;
+    const url = `https://contract.mexc.co/api/v1/contract/kline/${symbol}`;
     
     // Chuyển đổi interval cho API (Hour1 -> Min60)
     const apiInterval = convertIntervalForAPI(interval);
