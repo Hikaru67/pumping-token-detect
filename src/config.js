@@ -5,6 +5,7 @@ dotenv.config();
 export const config = {
   // MEXC API
   mexcApiUrl: process.env.MEXC_API_URL || 'https://futures.mexc.co/api/v1/contract/ticker',
+  mexcKlineApiBaseUrl: process.env.MEXC_KLINE_API_BASE_URL || 'https://contract.mexc.co/api/v1/contract/kline',
   
   // Binance API (public futures)
   binanceApiBaseUrl: process.env.BINANCE_API_BASE_URL || 'https://fapi.binance.com',
