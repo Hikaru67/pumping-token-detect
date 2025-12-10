@@ -4,7 +4,7 @@ dotenv.config();
 
 export const config = {
   // MEXC API
-  mexcApiUrl: process.env.MEXC_API_URL || 'https://futures.mexc.com/api/v1/contract/ticker',
+  mexcApiUrl: process.env.MEXC_API_URL || 'https://futures.mexc.co/api/v1/contract/ticker',
   
   // Binance API (public futures)
   binanceApiBaseUrl: process.env.BINANCE_API_BASE_URL || 'https://fapi.binance.com',
@@ -35,6 +35,11 @@ export const config = {
   telegramPrimarySignalTopicId: process.env.TELEGRAM_PRIMARY_SIGNAL_TOPIC_ID && process.env.TELEGRAM_PRIMARY_SIGNAL_TOPIC_ID.trim() !== '' 
     ? parseInt(process.env.TELEGRAM_PRIMARY_SIGNAL_TOPIC_ID, 10) 
     : null, // Topic ID cho primary signal alerts (RSI super overbought) - dùng chung group với TELEGRAM_GROUP_ID
+  
+  // Telegram Auto Trade (thông báo khi vào lệnh tự động)
+  telegramAutoTradeTopicId: process.env.TELEGRAM_AUTO_TRADE_TOPIC_ID && process.env.TELEGRAM_AUTO_TRADE_TOPIC_ID.trim() !== '' 
+    ? parseInt(process.env.TELEGRAM_AUTO_TRADE_TOPIC_ID, 10) 
+    : null, // Topic ID cho auto trade alerts (khi vào lệnh được trigger) - dùng chung group với TELEGRAM_GROUP_ID
   
   // Telegram Bot - Drop Tokens
   telegramDropChatId: process.env.TELEGRAM_DROP_CHAT_ID || '', // Channel ID cho drop (channel riêng)
@@ -114,6 +119,17 @@ export const config = {
     candleWeightSmall: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_WEIGHT_SMALL || '4'),
     candleBonusSpecial: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_BONUS || '3'),
   },
+  
+  // Trading Configuration
+  tradingEnabled: process.env.TRADING_ENABLED === 'true', // Bật/tắt trading tự động
+  tradingLeverage: parseInt(process.env.TRADING_LEVERAGE || '2', 10), // Đòn bẩy (mặc định: 2x)
+  tradingFundingRateThreshold: parseFloat(process.env.TRADING_FUNDING_RATE_THRESHOLD || '-0.5', 10), // Ngưỡng funding rate (ví dụ: -0.5 = -0.5%)
+  tradingPumpThreshold: parseFloat(process.env.TRADING_PUMP_THRESHOLD || '30', 10), // Ngưỡng pump % (ví dụ: 30 = 30%)
+  
+  // Volume % cho từng chiến thuật
+  tradingStrategy1VolumePercent: parseFloat(process.env.TRADING_STRATEGY1_VOLUME_PERCENT || '2', 10), // 2% tài khoản
+  tradingStrategy2VolumePercent: parseFloat(process.env.TRADING_STRATEGY2_VOLUME_PERCENT || '10', 10), // 10% tài khoản
+  tradingStrategy3VolumePercent: parseFloat(process.env.TRADING_STRATEGY3_VOLUME_PERCENT || '1', 10), // 1% tài khoản
 };
 
 // Validate required config

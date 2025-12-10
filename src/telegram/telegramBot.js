@@ -930,3 +930,96 @@ export async function sendTelegramDropAlert(top10, alertReason = '', confluenceI
   }
 }
 
+/**
+ * Format thông báo khi vào lệnh tự động
+ * @param {Object} tradeResult - Kết quả vào lệnh
+ * @param {Object} token - Token object
+ * @returns {string} Message đã format
+ */
+function formatAutoTradeMessage(tradeResult, token) {
+  const timestamp = new Date().toLocaleString('vi-VN', { 
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
+  const cleanSymbolName = escapeMarkdown(cleanSymbol(token.symbol));
+  const pumpPercent = (token.riseFallRate * 100).toFixed(2);
+  const sign = token.riseFallRate >= 0 ? '+' : '';
+  
+  let message = `🎯 *VÀO LỆNH TỰ ĐỘNG*\n\n`;
+  message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+  message += `📊 *Chiến thuật:* ${tradeResult.strategy}\n`;
+  message += `📈 *Pump:* ${sign}${pumpPercent}%\n`;
+  message += `💵 *Volume:* ${tradeResult.volume?.toFixed(8) || 'N/A'}\n`;
+  message += `⚡ *Leverage:* ${config.tradingLeverage}x\n`;
+  
+  if (tradeResult.fundingRate !== null && tradeResult.fundingRate !== undefined) {
+    const fundingPercent = (tradeResult.fundingRate * 100).toFixed(4);
+    const fundingSign = tradeResult.fundingRate >= 0 ? '+' : '';
+    message += `💹 *Funding Rate:* ${fundingSign}${fundingPercent}%\n`;
+  }
+  
+  if (tradeResult.orderResult?.orderId) {
+    message += `🆔 *Order ID:* ${escapeMarkdown(tradeResult.orderResult.orderId.toString())}\n`;
+  }
+  
+  if (tradeResult.orderResult?.symbol) {
+    message += `📝 *Contract:* ${escapeMarkdown(tradeResult.orderResult.symbol)}\n`;
+  }
+  
+  message += `\n📝 *Lý do:* ${escapeMarkdown(tradeResult.reason)}\n`;
+  message += `\n⏰ ${timestamp}`;
+  
+  return message;
+}
+
+/**
+ * Gửi thông báo khi vào lệnh tự động thành công
+ * @param {Object} tradeResult - Kết quả vào lệnh từ checkAndExecuteTrade
+ * @param {Object} token - Token object
+ * @returns {Promise<boolean>} true nếu gửi thành công
+ */
+export async function sendAutoTradeNotification(tradeResult, token) {
+  if (!config.telegramBotToken) {
+    console.warn('⚠️  Telegram Bot Token chưa được cấu hình, bỏ qua việc gửi thông báo auto trade');
+    return false;
+  }
+
+  // Kiểm tra có config topic không
+  if (!config.telegramAutoTradeTopicId || !config.telegramGroupId) {
+    console.warn('⚠️  Chưa cấu hình TELEGRAM_AUTO_TRADE_TOPIC_ID hoặc TELEGRAM_GROUP_ID, bỏ qua việc gửi thông báo auto trade');
+    return false;
+  }
+
+  try {
+    const message = formatAutoTradeMessage(tradeResult, token);
+    
+    // Gửi vào topic trong group
+    const success = await sendToTelegramChat(
+      config.telegramGroupId,
+      message,
+      config.telegramAutoTradeTopicId,
+      false // Không silent mode cho auto trade notification
+    );
+    
+    if (success) {
+      console.log(`✅ Đã gửi thông báo auto trade vào topic ${config.telegramAutoTradeTopicId} trong group: ${config.telegramGroupId}`);
+    } else {
+      console.error(`❌ Lỗi khi gửi thông báo auto trade vào topic ${config.telegramAutoTradeTopicId}`);
+    }
+    
+    return success;
+  } catch (error) {
+    console.error('❌ Lỗi khi gửi Auto Trade Telegram:', error.message);
+    if (error.stack) {
+      console.error('Stack trace:', error.stack);
+    }
+    return false;
+  }
+}
+
