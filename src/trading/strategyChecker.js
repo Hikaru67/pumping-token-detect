@@ -1,6 +1,7 @@
 import { countSuperOverboughtRSI, getOverboughtTimeframes } from '../utils/dataProcessor.js';
 import { checkReversalSignal } from '../indicators/candlestickPattern.js';
 import { config } from '../config.js';
+import { appendSignalLog } from '../utils/logger.js';
 
 /**
  * Kiểm tra RSI có đạt super overbought (>= 90) không
@@ -205,6 +206,9 @@ export async function checkAllStrategies(token) {
   // Check Strategy 2
   const strategy2Result = await checkStrategy2(token);
   if (strategy2Result.matched) {
+    await appendSignalLog(
+      `[${token.symbol || 'UNKNOWN'}] Chiến thuật 2 THỎA MÃN: ${strategy2Result.reason}`
+    );
     return {
       strategy: 2,
       result: strategy2Result,
@@ -215,6 +219,9 @@ export async function checkAllStrategies(token) {
   // Check Strategy 1
   const strategy1Result = await checkStrategy1(token);
   if (strategy1Result.matched) {
+    await appendSignalLog(
+      `[${token.symbol || 'UNKNOWN'}] Chiến thuật 1 THỎA MÃN: ${strategy1Result.reason}`
+    );
     return {
       strategy: 1,
       result: strategy1Result,
@@ -225,6 +232,9 @@ export async function checkAllStrategies(token) {
   // Check Strategy 3
   const strategy3Result = await checkStrategy3(token);
   if (strategy3Result.matched) {
+    await appendSignalLog(
+      `[${token.symbol || 'UNKNOWN'}] Chiến thuật 3 THỎA MÃN: ${strategy3Result.reason}`
+    );
     return {
       strategy: 3,
       result: strategy3Result,
@@ -232,6 +242,9 @@ export async function checkAllStrategies(token) {
     };
   }
   
+  await appendSignalLog(
+    `[${token.symbol || 'UNKNOWN'}] KHÔNG có chiến thuật nào thỏa mãn`
+  );
   return {
     strategy: null,
     result: { matched: false, reason: 'Không có chiến thuật nào thỏa mãn' },
