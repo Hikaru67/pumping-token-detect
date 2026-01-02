@@ -76,9 +76,10 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
   top10.forEach((token, index) => {
     const riseFallPercent = (token.riseFallRate * 100).toFixed(2);
     const sign = token.riseFallRate >= 0 ? '+' : '';
+    const lastPrice = token.lastPrice;
     const cleanSymbolName = escapeMarkdown(cleanSymbol(token.symbol));
     
-    message += `*#${token.rank} $${cleanSymbolName} ${sign}${riseFallPercent}%`;
+    message += `*#${token.rank} $${cleanSymbolName} ${lastPrice} ${sign}${riseFallPercent}%`;
     
     // Thêm funding rate
     if (token.fundingRate !== undefined && token.fundingRate !== null && !isNaN(token.fundingRate)) {
