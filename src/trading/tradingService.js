@@ -3,10 +3,38 @@ import {
   checkBingxContractSymbol,
   placeBingxSwapOrder,
   getBingxSwapTickers,
-  callBingxPublicApi
+  callBingxPublicApi,
+  getBingxOpenPositions
 } from '../api/bingxService.js';
 import { config } from '../config.js';
 import { getBaseSymbol } from '../utils/symbolUtils.js';
+
+/**
+ * Láy volume (kích thước) của vị thế SHORT đang mở cho một token
+ * @param {string} symbol - Symbol (ví dụ: BTC-USDT)
+ * @returns {Promise<number>} Kích thước vị thế đang mở (số lượng token)
+ */
+export async function getOpenPositionVolume(symbol) {
+  try {
+    const normalizedSymbol = symbol.includes('-') ? symbol : `${symbol}-USDT`;
+    const positions = await getBingxOpenPositions(normalizedSymbol.toUpperCase());
+
+    if (positions && Array.isArray(positions)) {
+      // Tìm vị thế SHORT cho symbol này
+      const shortPosition = positions.find(
+        pos => pos.symbol === normalizedSymbol.toUpperCase() && pos.positionSide === 'SHORT'
+      );
+
+      if (shortPosition) {
+        return parseFloat(shortPosition.positionAmt || shortPosition.volume || '0');
+      }
+    }
+    return 0;
+  } catch (error) {
+    console.warn(`⚠️  Lỗi khi lấy open position cho ${symbol}:`, error.message);
+    return 0;
+  }
+}
 
 /**
  * Lấy funding rate từ BingX
