@@ -17,6 +17,8 @@ Hệ thống tự động theo dõi và cảnh báo top 10 token có tỷ lệ p
 - 🎯 **RSI Confluence** - Phát hiện khi nhiều timeframes có cùng trạng thái (oversold/overbought)
 - 💰 Hiển thị **funding rate** và thông tin chi tiết
 - 🎯 Symbol được làm sạch (bỏ đuôi _USDT/_USDC)
+- ✅ Kiểm tra nhanh contract symbol BingX (BTC, ETH, XPIN, ...)
+- 🏦 Kiểm tra token có hợp đồng futures (USDT-M) trên Binance và hiển thị trong single signal alert
 - 🚀 Gửi alert ngay lần đầu chạy (không cần đợi thay đổi)
 - 🔇 **Silent mode** - Gửi thông báo im lặng (không có âm thanh/thông báo)
 - 🛡️ Xử lý lỗi và validation đầy đủ
@@ -89,6 +91,18 @@ TELEGRAM_DISABLE_NOTIFICATION=false
 # Silent mode cho drop alerts (optional, mặc định: false)
 TELEGRAM_DROP_DISABLE_NOTIFICATION=false
 
+# Binance Futures API (public, optional nhưng khuyến nghị để hiển thị tín hiệu đầy đủ)
+BINANCE_API_BASE_URL=https://fapi.binance.com
+BINANCE_API_TIMEOUT=10000
+BINANCE_EXCHANGE_INFO_CACHE_MS=300000
+
+# BingX API (optional)
+BINGX_API_KEY=
+BINGX_API_SECRET=
+BINGX_BASE_URL=https://open-api.bingx.com
+BINGX_RECV_WINDOW=5000
+BINGX_API_TIMEOUT=15000
+
 # RSI Configuration - Timeframes để tính RSI
 # MEXC hỗ trợ: Min1, Min5, Min15, Min30, Hour1, Hour4, Hour8, Day1, Week1, Month1
 RSI_TIMEFRAMES=Min15,Min30,Hour1,Hour4
@@ -142,7 +156,9 @@ RSI_CONFLUENCE_MIN_TIMEFRAMES=2
 pump-token-alert/
 ├── src/
 │   ├── api/              # API clients
-│   │   └── apiClient.js  # MEXC API client
+│   │   ├── apiClient.js        # MEXC API client
+│   │   ├── bingxService.js     # BingX API service (positions/orders/balance)
+│   │   └── binanceService.js   # Binance futures public helpers (exchangeInfo, symbol check)
 │   ├── telegram/         # Telegram bot
 │   │   └── telegramBot.js
 │   ├── indicators/       # Technical indicators
@@ -188,6 +204,8 @@ pump-token-alert/
 ├── scheduler.js           # Cron job scheduler cho pump tokens
 ├── dropScheduler.js       # Cron job scheduler cho drop tokens
 ├── apiClient.js           # MEXC API client
+├── binanceService.js      # Binance futures public helpers
+├── bingxService.js        # BingX API service (tickers/positions/orders)
 ├── dataProcessor.js       # Xử lý và tính toán riseFallRate, RSI
 ├── rsiCalculator.js       # Tính toán RSI và confluence
 ├── storage.js             # Lưu trữ top 10 vào JSON
@@ -264,6 +282,25 @@ pump-token-alert/
 ... (đến top 10)
 
 ⏰ Thời gian: 15/01/2025 14:30:25
+```
+
+**Ví dụ single signal alert (hiển thị trạng thái Binance Futures ở cuối message):**
+
+```
+🔥 ⚡ SUPER OVERBOUGHT ⚡⭐
+*$TOKEN* 78.5/100
+📊 RSI: 15m🔴88.2🔄 • 30m🔴90.1🔄 • 1h🔴82.5
+🎯 Score: 78.5/100 (RSI 45.0 | Div 18.5 | Candle 15.0)
+📊 *RSI overbought:* 15m, 30m
+🕯️ *Nến đảo chiều:* Min15
+
+💰 Giá hiện tại: 1.2345
+📈 Biến động 24h: +35.42%
+💹 Funding Rate: +0.0150%
+📊 Volume 24h: 12.45M
+🏦 Binance Futures: ✅ Có hợp đồng futures - TOKENUSDT (PERPETUAL)
+
+⏰ 25/11/2025 21:12:03
 ```
 
 **Ví dụ alert khi RSI Confluence tăng:**
@@ -408,6 +445,24 @@ Các tính năng có thể mở rộng:
 - [ ] Phân tích xu hướng và biểu đồ
 - [ ] Retry logic cho API calls
 - [ ] Rate limiting cho Telegram API
+
+## 🔌 BingX API Helpers
+
+- `getBingxSwapTickers(symbol?)`: lấy ticker hợp đồng (public).
+- `checkBingxContractSymbol(symbol)`: kiểm tra hợp đồng có tồn tại (input `BTC` → `BTC-USDT`).
+- `getBingxAccountBalance(currency)`: lấy số dư hợp đồng (private).
+- `getBingxOpenPositions(symbol?)`: danh sách vị thế đang mở (private).
+- `placeBingxSwapOrder(orderPayload)`: mở lệnh mới (private).
+- `getBingxOrderHistory(params)`: lịch sử lệnh (private).
+
+**Lưu ý:** Các hàm private yêu cầu `BINGX_API_KEY`/`BINGX_API_SECRET`. Tests liên quan tới giao dịch thật (như đặt lệnh) chỉ nên chạy trên môi trường demo/tài khoản nhỏ.
+
+## 🏦 Binance Futures Helpers (public)
+
+- `checkBinanceFuturesSymbol(symbol, quote?)`: kiểm tra token có hợp đồng futures USDT-M trên Binance hay không (ví dụ: `BTC_USDT` → `BTCUSDT`).
+- `getBinanceFuturesExchangeInfo(forceRefresh?)`: tải và cache dữ liệu `exchangeInfo` từ Binance futures (mặc định cache 5 phút).
+
+Các biến môi trường `BINANCE_API_BASE_URL`, `BINANCE_API_TIMEOUT`, `BINANCE_EXCHANGE_INFO_CACHE_MS` cho phép tinh chỉnh endpoint, timeout và TTL cache nếu cần.
 
 ## 📄 License
 

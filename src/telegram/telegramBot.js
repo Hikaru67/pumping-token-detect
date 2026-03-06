@@ -2,6 +2,7 @@ import axios from 'axios';
 import { config } from '../config.js';
 import { formatTimeframe, getRSIStatus } from '../indicators/rsiCalculator.js';
 import { checkReversalSignal } from '../indicators/candlestickPattern.js';
+import { checkBinanceFuturesSymbol } from '../api/binanceService.js';
 
 /**
  * Bỏ đuôi _USDT hoặc _USDC trong symbol
@@ -75,9 +76,10 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
   top10.forEach((token, index) => {
     const riseFallPercent = (token.riseFallRate * 100).toFixed(2);
     const sign = token.riseFallRate >= 0 ? '+' : '';
+    const lastPrice = token.lastPrice;
     const cleanSymbolName = escapeMarkdown(cleanSymbol(token.symbol));
     
-    message += `*#${token.rank} $${cleanSymbolName} ${sign}${riseFallPercent}%`;
+    message += `*#${token.rank} $${cleanSymbolName} ${lastPrice} ${sign}${riseFallPercent}%`;
     
     // Thêm funding rate
     if (token.fundingRate !== undefined && token.fundingRate !== null && !isNaN(token.fundingRate)) {
@@ -378,7 +380,7 @@ function formatSignalAlertMessage(signalTokens) {
  * @param {number} superOverboughtCount - Số lượng RSI super overbought (để hiển thị số sao)
  * @returns {string} Formatted message
  */
-function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSuperOverbought = false, scoreInfo = null, metadata = {}) {
+function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSuperOverbought = false, scoreInfo = null, metadata = {}, binanceInfo = null) {
   if (!token || !token.symbol) {
     return '';
   }
@@ -524,7 +526,26 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
   if (token.volume24) {
     message += `📊 Volume 24h: ${formatNumber(token.volume24)}\n`;
   }
-  
+
+  const binanceStatusText = (() => {
+    if (!binanceInfo) {
+      return '⚠️ Không kiểm tra được';
+    }
+    if (typeof binanceInfo.exists === 'boolean') {
+      if (binanceInfo.exists) {
+        const contractType = binanceInfo.info?.contractType ? ` (${binanceInfo.info.contractType})` : '';
+        const symbolText = binanceInfo.symbol ? ` - ${binanceInfo.symbol}` : '';
+        return `✅ Có hợp đồng futures${symbolText}${contractType}`;
+      }
+      return '❌ Chưa có hợp đồng futures';
+    }
+    if (binanceInfo.error) {
+      return `⚠️ Không kiểm tra được (${binanceInfo.error})`;
+    }
+    return '⚠️ Không xác định';
+  })();
+
+  message += `🏦 Binance Futures: ${binanceStatusText}\n`;
   message += `\n⏰ ${timestamp}`;
   
   return message;
@@ -533,11 +554,14 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
 /**
  * Gửi signal alert cho một token riêng lẻ (gửi ngay khi phát hiện)
  * Gửi vào cả channel (TELEGRAM_CHAT_ID) và group topic (TELEGRAM_SIGNAL_TOPIC_ID) nếu có config
+ * Khi có RSI super overbought, sẽ gửi thêm vào primary signal destinations:
+ *   - TELEGRAM_PRIMARY_SIGNAL_CHAT_ID (channel riêng, optional)
+ *   - TELEGRAM_PRIMARY_SIGNAL_TOPIC_ID (topic trong cùng group với TELEGRAM_GROUP_ID)
  * @param {Object} token - Token object có tín hiệu đảo chiều
  * @param {Array<string>} signalTimeframes - Các timeframes có signal
  * @param {boolean} forceSilent - Bắt buộc gửi ở chế độ im lặng
  * @param {string} reason - Lý do alert (optional, để format message đúng)
- * @param {boolean} hasSuperOverbought - Flag để highlight khi có 3+ RSI >= SUPER_OVER_BOUGHT
+ * @param {boolean} hasSuperOverbought - Flag để highlight khi có 3+ RSI >= SUPER_OVER_BOUGHT (cũng trigger gửi vào primary signal destinations)
  * @returns {Promise<boolean>} true nếu gửi thành công ít nhất một destination
  */
 export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent = false, reason = '', hasSuperOverbought = false, scoreInfo = null, metadata = {}) {
@@ -552,18 +576,41 @@ export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent
   // Kiểm tra có ít nhất một destination để gửi
   const hasChannel = config.telegramChatId && config.telegramChatId.trim() !== '';
   const hasGroupTopic = config.telegramGroupId && config.telegramSignalTopicId;
+  
+  // Kiểm tra primary signal destinations (chỉ dùng khi có super overbought)
+  // Primary signal topic dùng chung group với signal thông thường (TELEGRAM_GROUP_ID)
+  const hasPrimaryChannel = hasSuperOverbought && config.telegramPrimarySignalChatId && config.telegramPrimarySignalChatId.trim() !== '';
+  const hasPrimaryGroupTopic = hasSuperOverbought && config.telegramGroupId && config.telegramPrimarySignalTopicId;
 
-  if (!hasChannel && !hasGroupTopic) {
+  if (!hasChannel && !hasGroupTopic && !hasPrimaryChannel && !hasPrimaryGroupTopic) {
     console.warn(`⚠️  Không có destination để gửi signal alert cho ${token.symbol}`);
     return false;
   }
 
   try {
-    const message = formatSingleSignalMessage(token, signalTimeframes, reason, hasSuperOverbought, scoreInfo, metadata);
+    let binanceInfo = null;
+    try {
+      binanceInfo = await checkBinanceFuturesSymbol(token.symbol);
+    } catch (binanceError) {
+      console.warn(`⚠️  Không thể kiểm tra Binance cho ${token.symbol}: ${binanceError.message}`);
+      binanceInfo = { exists: null, symbol: token.symbol, error: binanceError.message };
+    }
+
+    const message = formatSingleSignalMessage(
+      token,
+      signalTimeframes,
+      reason,
+      hasSuperOverbought,
+      scoreInfo,
+      metadata,
+      binanceInfo
+    );
     const disableNotification = forceSilent ? true : config.telegramDisableNotification;
     
     let channelSuccess = false;
     let topicSuccess = false;
+    let primaryChannelSuccess = false;
+    let primaryTopicSuccess = false;
 
     // Gửi vào channel nếu có config
     if (hasChannel) {
@@ -599,7 +646,42 @@ export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent
       }
     }
 
-    const overallSuccess = channelSuccess || topicSuccess;
+    // Gửi vào primary signal channel nếu có super overbought và có config
+    if (hasPrimaryChannel) {
+      try {
+        primaryChannelSuccess = await sendToTelegramChat(
+          config.telegramPrimarySignalChatId,
+          message,
+          null, // Channel không có topic
+          disableNotification
+        );
+        if (primaryChannelSuccess) {
+          console.log(`✅ Đã gửi primary signal alert (super overbought) cho ${token.symbol} vào channel ${config.telegramPrimarySignalChatId}`);
+        }
+      } catch (error) {
+        console.error(`❌ Lỗi khi gửi primary signal alert cho ${token.symbol} vào channel:`, error.message);
+      }
+    }
+
+    // Gửi vào primary signal group topic nếu có super overbought và có config
+    // Dùng chung group với signal thông thường (TELEGRAM_GROUP_ID)
+    if (hasPrimaryGroupTopic) {
+      try {
+        primaryTopicSuccess = await sendToTelegramChat(
+          config.telegramGroupId,
+          message,
+          config.telegramPrimarySignalTopicId,
+          disableNotification
+        );
+        if (primaryTopicSuccess) {
+          console.log(`✅ Đã gửi primary signal alert (super overbought) cho ${token.symbol} vào topic ${config.telegramPrimarySignalTopicId} trong group ${config.telegramGroupId}`);
+        }
+      } catch (error) {
+        console.error(`❌ Lỗi khi gửi primary signal alert cho ${token.symbol} vào topic:`, error.message);
+      }
+    }
+
+    const overallSuccess = channelSuccess || topicSuccess || primaryChannelSuccess || primaryTopicSuccess;
     if (!overallSuccess) {
       console.error(`❌ Không thể gửi signal alert cho ${token.symbol} vào bất kỳ destination nào`);
     }
@@ -842,6 +924,99 @@ export async function sendTelegramDropAlert(top10, alertReason = '', confluenceI
     });
   } catch (error) {
     console.error('❌ Lỗi khi gửi Drop Telegram:', error.message);
+    if (error.stack) {
+      console.error('Stack trace:', error.stack);
+    }
+    return false;
+  }
+}
+
+/**
+ * Format thông báo khi vào lệnh tự động
+ * @param {Object} tradeResult - Kết quả vào lệnh
+ * @param {Object} token - Token object
+ * @returns {string} Message đã format
+ */
+function formatAutoTradeMessage(tradeResult, token) {
+  const timestamp = new Date().toLocaleString('vi-VN', { 
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
+  const cleanSymbolName = escapeMarkdown(cleanSymbol(token.symbol));
+  const pumpPercent = (token.riseFallRate * 100).toFixed(2);
+  const sign = token.riseFallRate >= 0 ? '+' : '';
+  
+  let message = `🎯 *VÀO LỆNH TỰ ĐỘNG*\n\n`;
+  message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+  message += `📊 *Chiến thuật:* ${tradeResult.strategy}\n`;
+  message += `📈 *Pump:* ${sign}${pumpPercent}%\n`;
+  message += `💵 *Volume:* ${tradeResult.volume?.toFixed(8) || 'N/A'}\n`;
+  message += `⚡ *Leverage:* ${config.tradingLeverage}x\n`;
+  
+  if (tradeResult.fundingRate !== null && tradeResult.fundingRate !== undefined) {
+    const fundingPercent = (tradeResult.fundingRate * 100).toFixed(4);
+    const fundingSign = tradeResult.fundingRate >= 0 ? '+' : '';
+    message += `💹 *Funding Rate:* ${fundingSign}${fundingPercent}%\n`;
+  }
+  
+  if (tradeResult.orderResult?.orderId) {
+    message += `🆔 *Order ID:* ${escapeMarkdown(tradeResult.orderResult.orderId.toString())}\n`;
+  }
+  
+  if (tradeResult.orderResult?.symbol) {
+    message += `📝 *Contract:* ${escapeMarkdown(tradeResult.orderResult.symbol)}\n`;
+  }
+  
+  message += `\n📝 *Lý do:* ${escapeMarkdown(tradeResult.reason)}\n`;
+  message += `\n⏰ ${timestamp}`;
+  
+  return message;
+}
+
+/**
+ * Gửi thông báo khi vào lệnh tự động thành công
+ * @param {Object} tradeResult - Kết quả vào lệnh từ checkAndExecuteTrade
+ * @param {Object} token - Token object
+ * @returns {Promise<boolean>} true nếu gửi thành công
+ */
+export async function sendAutoTradeNotification(tradeResult, token) {
+  if (!config.telegramBotToken) {
+    console.warn('⚠️  Telegram Bot Token chưa được cấu hình, bỏ qua việc gửi thông báo auto trade');
+    return false;
+  }
+
+  // Kiểm tra có config topic không
+  if (!config.telegramAutoTradeTopicId || !config.telegramGroupId) {
+    console.warn('⚠️  Chưa cấu hình TELEGRAM_AUTO_TRADE_TOPIC_ID hoặc TELEGRAM_GROUP_ID, bỏ qua việc gửi thông báo auto trade');
+    return false;
+  }
+
+  try {
+    const message = formatAutoTradeMessage(tradeResult, token);
+    
+    // Gửi vào topic trong group
+    const success = await sendToTelegramChat(
+      config.telegramGroupId,
+      message,
+      config.telegramAutoTradeTopicId,
+      false // Không silent mode cho auto trade notification
+    );
+    
+    if (success) {
+      console.log(`✅ Đã gửi thông báo auto trade vào topic ${config.telegramAutoTradeTopicId} trong group: ${config.telegramGroupId}`);
+    } else {
+      console.error(`❌ Lỗi khi gửi thông báo auto trade vào topic ${config.telegramAutoTradeTopicId}`);
+    }
+    
+    return success;
+  } catch (error) {
+    console.error('❌ Lỗi khi gửi Auto Trade Telegram:', error.message);
     if (error.stack) {
       console.error('Stack trace:', error.stack);
     }

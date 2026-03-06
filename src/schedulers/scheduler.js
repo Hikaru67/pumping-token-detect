@@ -8,6 +8,7 @@ import { checkReversalSignal } from '../indicators/candlestickPattern.js';
 import { checkRsiBullishDivergence } from '../indicators/divergence.js';
 import { config } from '../config.js';
 import { calculateSingleSignalScore } from '../utils/signalScoring.js';
+import { checkAndExecuteTrade } from '../trading/tradingTrigger.js';
 
 let isRunning = false;
 
@@ -279,17 +280,38 @@ async function checkPumpTokens() {
     
     // Callback để check và gửi signal alert ngay khi tính RSI xong cho mỗi token
     const onTokenRSIComplete = async (tokenWithRSI, index) => {
-      // Chỉ check signal alert nếu có config
-      if (!config.telegramSignalTopicId || !config.telegramGroupId) {
-        return;
-      }
-
       // Bỏ qua nếu token không có RSI data (có lỗi khi tính RSI)
       if (!tokenWithRSI.rsi || typeof tokenWithRSI.rsi !== 'object' || Object.keys(tokenWithRSI.rsi).length === 0) {
         return;
       }
 
       try {
+        // ========== PHẦN 1: TRADING TRIGGER (chạy async, không block luồng) ==========
+        // Kiểm tra và vào lệnh nếu có tín hiệu super overbought (chạy độc lập với signal alert)
+        // Chạy async để không làm chậm luồng xử lý chính
+        if (config.tradingEnabled) {
+          // Chạy async không chờ kết quả
+          checkAndExecuteTrade(tokenWithRSI)
+            .then(tradeResult => {
+              if (tradeResult.executed) {
+                console.log(`   🎯 [${tokenWithRSI.symbol}] Đã vào lệnh SHORT thành công!`);
+                console.log(`      Chiến thuật: ${tradeResult.strategy}`);
+                console.log(`      Volume: ${tradeResult.volume?.toFixed(8) || 'N/A'}`);
+                console.log(`      Order ID: ${tradeResult.orderResult?.orderId || 'N/A'}`);
+              }
+            })
+            .catch(error => {
+              console.warn(`   ⚠️  Lỗi khi kiểm tra trading trigger cho ${tokenWithRSI.symbol}:`, error.message);
+            });
+          // Không await, tiếp tục xử lý luồng chính ngay lập tức
+        }
+
+        // ========== PHẦN 2: SIGNAL ALERT (chỉ chạy nếu có config Telegram) ==========
+        // Chỉ check signal alert nếu có config Telegram
+        if (!config.telegramSignalTopicId || !config.telegramGroupId) {
+          return;
+        }
+
         // Tìm token tương ứng trong previousData để so sánh
         const previousToken = findPreviousToken(tokenWithRSI.symbol);
         
@@ -318,7 +340,7 @@ async function checkPumpTokens() {
           }
         }
       } catch (error) {
-        console.warn(`   ⚠️  Lỗi khi kiểm tra signal cho ${tokenWithRSI.symbol}:`, error.message);
+        console.warn(`   ⚠️  Lỗi khi kiểm tra signal/trading cho ${tokenWithRSI.symbol}:`, error.message);
       }
     };
     

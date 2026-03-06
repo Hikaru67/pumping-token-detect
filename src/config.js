@@ -4,7 +4,20 @@ dotenv.config();
 
 export const config = {
   // MEXC API
-  mexcApiUrl: process.env.MEXC_API_URL || 'https://futures.mexc.com/api/v1/contract/ticker',
+  mexcApiUrl: process.env.MEXC_API_URL || 'https://futures.mexc.co/api/v1/contract/ticker',
+  mexcKlineApiBaseUrl: process.env.MEXC_KLINE_API_BASE_URL || 'https://contract.mexc.co/api/v1/contract/kline',
+  
+  // Binance API (public futures)
+  binanceApiBaseUrl: process.env.BINANCE_API_BASE_URL || 'https://fapi.binance.com',
+  binanceApiTimeout: parseInt(process.env.BINANCE_API_TIMEOUT || '10000', 10),
+  binanceExchangeInfoCacheMs: parseInt(process.env.BINANCE_EXCHANGE_INFO_CACHE_MS || '300000', 10), // 5 phút
+  
+  // BingX API
+  bingxApiBaseUrl: process.env.BINGX_BASE_URL || 'https://open-api.bingx.com',
+  bingxApiKey: process.env.BINGX_API_KEY || '',
+  bingxApiSecret: process.env.BINGX_API_SECRET || '',
+  bingxRecvWindow: parseInt(process.env.BINGX_RECV_WINDOW || '5000', 10),
+  bingxApiTimeout: parseInt(process.env.BINGX_API_TIMEOUT || '15000', 10),
   
   // Telegram Bot - Pump Tokens
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
@@ -17,6 +30,17 @@ export const config = {
   telegramSignalTopicId: process.env.TELEGRAM_SIGNAL_TOPIC_ID && process.env.TELEGRAM_SIGNAL_TOPIC_ID.trim() !== '' 
     ? parseInt(process.env.TELEGRAM_SIGNAL_TOPIC_ID, 10) 
     : null, // Topic ID cho signal alerts (tín hiệu đảo chiều)
+  
+  // Telegram Primary Signal (cho RSI super overbought - gửi song song với signal thông thường)
+  telegramPrimarySignalChatId: process.env.TELEGRAM_PRIMARY_SIGNAL_CHAT_ID || '', // Channel ID cho primary signal (optional)
+  telegramPrimarySignalTopicId: process.env.TELEGRAM_PRIMARY_SIGNAL_TOPIC_ID && process.env.TELEGRAM_PRIMARY_SIGNAL_TOPIC_ID.trim() !== '' 
+    ? parseInt(process.env.TELEGRAM_PRIMARY_SIGNAL_TOPIC_ID, 10) 
+    : null, // Topic ID cho primary signal alerts (RSI super overbought) - dùng chung group với TELEGRAM_GROUP_ID
+  
+  // Telegram Auto Trade (thông báo khi vào lệnh tự động)
+  telegramAutoTradeTopicId: process.env.TELEGRAM_AUTO_TRADE_TOPIC_ID && process.env.TELEGRAM_AUTO_TRADE_TOPIC_ID.trim() !== '' 
+    ? parseInt(process.env.TELEGRAM_AUTO_TRADE_TOPIC_ID, 10) 
+    : null, // Topic ID cho auto trade alerts (khi vào lệnh được trigger) - dùng chung group với TELEGRAM_GROUP_ID
   
   // Telegram Bot - Drop Tokens
   telegramDropChatId: process.env.TELEGRAM_DROP_CHAT_ID || '', // Channel ID cho drop (channel riêng)
@@ -96,6 +120,17 @@ export const config = {
     candleWeightSmall: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_WEIGHT_SMALL || '4'),
     candleBonusSpecial: parseFloat(process.env.SINGLE_SIGNAL_CANDLE_BONUS || '3'),
   },
+  
+  // Trading Configuration
+  tradingEnabled: process.env.TRADING_ENABLED === 'true', // Bật/tắt trading tự động
+  tradingLeverage: parseInt(process.env.TRADING_LEVERAGE || '2', 10), // Đòn bẩy (mặc định: 2x)
+  tradingFundingRateThreshold: parseFloat(process.env.TRADING_FUNDING_RATE_THRESHOLD || '-0.5', 10), // Ngưỡng funding rate (ví dụ: -0.5 = -0.5%)
+  tradingPumpThreshold: parseFloat(process.env.TRADING_PUMP_THRESHOLD || '30', 10), // Ngưỡng pump % (ví dụ: 30 = 30%)
+  
+  // Volume % cho từng chiến thuật
+  tradingStrategy1VolumePercent: parseFloat(process.env.TRADING_STRATEGY1_VOLUME_PERCENT || '2', 10), // 2% tài khoản
+  tradingStrategy2VolumePercent: parseFloat(process.env.TRADING_STRATEGY2_VOLUME_PERCENT || '10', 10), // 10% tài khoản
+  tradingStrategy3VolumePercent: parseFloat(process.env.TRADING_STRATEGY3_VOLUME_PERCENT || '1', 10), // 1% tài khoản
 };
 
 // Validate required config
@@ -111,5 +146,10 @@ if (!config.telegramChatId && !config.telegramGroupId) {
 if (!config.telegramDropChatId) {
   console.warn('⚠️  Cảnh báo: TELEGRAM_DROP_CHAT_ID chưa được cấu hình!');
   console.warn('   Drop tokens sẽ không được gửi alert nếu không có channel này.');
+}
+
+if (!config.bingxApiKey || !config.bingxApiSecret) {
+  console.warn('ℹ️  Thông tin: BINGX_API_KEY/BINGX_API_SECRET chưa được cấu hình.');
+  console.warn('   Các request riêng tư tới BingX sẽ bị bỏ qua cho đến khi bạn cung cấp đủ thông tin.');
 }
 
