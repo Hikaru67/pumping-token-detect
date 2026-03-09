@@ -9,6 +9,7 @@ import {
 import { countSuperOverboughtRSI } from '../utils/dataProcessor.js';
 import { getBaseSymbol } from '../utils/symbolUtils.js';
 import { sendAutoTradeNotification } from '../telegram/telegramBot.js';
+import { logTradeHistory } from './tradeLogger.js';
 
 // Lưu trữ các lệnh đã vào để tránh vào lệnh trùng lặp
 const executedOrders = new Map(); // key: symbol, value: { timestamp, strategy, volume }
@@ -67,6 +68,7 @@ function saveExecutedOrder(symbol, strategy, volume) {
 export async function checkAndExecuteTrade(token) {
   // Kiểm tra trading có được bật không
   if (!config.tradingEnabled) {
+    logTradeHistory(token ? token.symbol : 'UNKNOWN', 'Trading chưa được bật (TRADING_ENABLED=false)');
     return {
       executed: false,
       reason: 'Trading chưa được bật (TRADING_ENABLED=false)',
@@ -76,6 +78,7 @@ export async function checkAndExecuteTrade(token) {
 
   // Kiểm tra token có RSI data không
   if (!token || !token.rsi || typeof token.rsi !== 'object') {
+    logTradeHistory(token ? token.symbol : 'UNKNOWN', 'Token không có RSI data');
     return {
       executed: false,
       reason: 'Token không có RSI data',
@@ -86,6 +89,7 @@ export async function checkAndExecuteTrade(token) {
   // Kiểm tra có RSI super overbought không (ít nhất 1 RSI >= 90)
   const superOverboughtCount = countSuperOverboughtRSI(token.rsi);
   if (superOverboughtCount === 0) {
+    logTradeHistory(token.symbol, 'Không có RSI super overbought');
     return {
       executed: false,
       reason: 'Không có RSI super overbought',
@@ -99,6 +103,7 @@ export async function checkAndExecuteTrade(token) {
   const pumpPercent = token.riseFallRate ? (token.riseFallRate * 100) : 0;
   if (pumpPercent < config.tradingPumpThreshold) {
     console.log(`   ⏭️  [${token.symbol}] Bỏ qua: Biên độ dao động giá (${pumpPercent.toFixed(2)}%) < ngưỡng quy định toàn cục (${config.tradingPumpThreshold}%)`);
+    logTradeHistory(token.symbol, `Bỏ qua: Biên độ giá (${pumpPercent.toFixed(2)}%) < ${config.tradingPumpThreshold}%`, { pumpPercent });
     return {
       executed: false,
       reason: `Biên độ giá (${pumpPercent.toFixed(2)}%) < ${config.tradingPumpThreshold}%`,
@@ -111,6 +116,7 @@ export async function checkAndExecuteTrade(token) {
 
   if (!strategyResult.strategy) {
     console.log(`   ⏭️  [${token.symbol}] Không có chiến thuật nào thỏa mãn: ${strategyResult.result.reason}`);
+    logTradeHistory(token.symbol, `Không có chiến thuật nào thỏa mãn: ${strategyResult.result.reason}`);
     return {
       executed: false,
       reason: strategyResult.result.reason,
@@ -123,6 +129,7 @@ export async function checkAndExecuteTrade(token) {
 
   // Kiểm tra đã vào lệnh gần đây chưa
   if (hasRecentOrder(token.symbol, strategyResult.strategy)) {
+    logTradeHistory(token.symbol, 'Đã vào lệnh cho symbol này trong vòng 1 giờ gần đây', { strategy: strategyResult.strategy });
     return {
       executed: false,
       reason: 'Đã vào lệnh cho symbol này trong vòng 1 giờ gần đây',
@@ -139,6 +146,7 @@ export async function checkAndExecuteTrade(token) {
 
   if (!preTradeCheck.canTrade) {
     console.log(`   ⏭️  [${token.symbol}] Bỏ qua: ${preTradeCheck.reason}`);
+    logTradeHistory(token.symbol, `Bỏ qua điều kiện pre-trade: ${preTradeCheck.reason}`, { fundingRate: preTradeCheck.fundingRate });
     return {
       executed: false,
       reason: preTradeCheck.reason,
@@ -155,6 +163,7 @@ export async function checkAndExecuteTrade(token) {
   const accountBalance = await getAccountBalance();
   if (accountBalance <= 0) {
     console.error(`   ❌ [${token.symbol}] Số dư tài khoản = 0`);
+    logTradeHistory(token.symbol, 'Số dư tài khoản = 0');
     return {
       executed: false,
       reason: 'Số dư tài khoản = 0',
@@ -189,6 +198,7 @@ export async function checkAndExecuteTrade(token) {
       // Safety check (Nếu volume hiện tại đã vượt volume max mục tiêu thì báo ko vào)
       if (finalEntryVolume <= 0) {
         console.log(`   ⏭️  [${token.symbol}] [Strategy 4] Bỏ qua: Volume mở (${currentOpenVol}) đã đạt khối lượng của hệ thống quy định (${targetEntryVolume})`);
+        logTradeHistory(token.symbol, 'Strategy 4: Đã đạt full volume theo quy định', { currentOpenVol, targetEntryVolume });
         return {
           executed: false,
           reason: 'Đã đạt full volume theo quy định',
@@ -201,6 +211,7 @@ export async function checkAndExecuteTrade(token) {
 
   if (finalEntryVolume <= 0) {
     console.error(`   ❌ [${token.symbol}] Volume vào lệnh = 0`);
+    logTradeHistory(token.symbol, 'Volume vào lệnh = 0');
     return {
       executed: false,
       reason: 'Volume vào lệnh = 0',
@@ -252,6 +263,7 @@ export async function checkAndExecuteTrade(token) {
     return tradeResult;
   } else {
     console.error(`   ❌ [${token.symbol}] Lỗi khi vào lệnh: ${orderResult.error}`);
+    logTradeHistory(token.symbol, `Lỗi khi vào lệnh qua API BingX: ${orderResult.error}`);
     return {
       executed: false,
       reason: `Lỗi khi vào lệnh: ${orderResult.error}`,
