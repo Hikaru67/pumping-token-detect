@@ -68,9 +68,10 @@ async function calculateRSIForTimeframe(symbol, timeframe, timeframeOrder) {
     // Tính RSI
     const rsi = calculateRSI(closes);
     
-    if (rsi !== null) {
-      console.log(`   ✅ ${symbol} ${formatTimeframe(timeframe)}: RSI = ${rsi.toFixed(2)}`);
-    }
+    // bỏ log  rsi by time frame
+    // if (rsi !== null) {
+    //   console.log(`   ✅ ${symbol} ${formatTimeframe(timeframe)}: RSI = ${rsi.toFixed(2)}`);
+    // }
     
     return {
       timeframe,
