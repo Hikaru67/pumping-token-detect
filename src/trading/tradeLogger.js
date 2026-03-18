@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { sendStrategyCheckingLog } from '../telegram/telegramBot.js';
 
 const logDir = path.join(process.cwd(), 'logs');
 const logFile = path.join(logDir, 'trade_history.log');
@@ -25,6 +26,11 @@ export function logTradeHistory(symbol, reason, extraData = {}) {
         };
 
         fs.appendFileSync(logFile, JSON.stringify(logEntry) + '\n');
+
+        // Bắn log vào Telegram song song (không đợi response)
+        sendStrategyCheckingLog(logEntry).catch(err => {
+            console.error(`Lỗi khi gửi Telegram log cho ${symbol}:`, err.message);
+        });
     } catch (error) {
         console.error(`Lỗi khi ghi trade history log cho ${symbol}:`, error.message);
     }
