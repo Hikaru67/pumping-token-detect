@@ -89,7 +89,6 @@ export async function checkAndExecuteTrade(token) {
   // Kiểm tra có RSI super overbought không (ít nhất 1 RSI >= 90)
   const superOverboughtCount = countSuperOverboughtRSI(token.rsi);
   if (superOverboughtCount === 0) {
-    logTradeHistory(token.symbol, 'Không có RSI super overbought');
     return {
       executed: false,
       reason: 'Không có RSI super overbought',
