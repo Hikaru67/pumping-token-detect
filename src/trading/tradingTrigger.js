@@ -102,7 +102,6 @@ export async function checkAndExecuteTrade(token) {
   const pumpPercent = token.riseFallRate ? (token.riseFallRate * 100) : 0;
   if (pumpPercent < config.tradingPumpThreshold) {
     console.log(`   ⏭️  [${token.symbol}] Bỏ qua: Biên độ dao động giá (${pumpPercent.toFixed(2)}%) < ngưỡng quy định toàn cục (${config.tradingPumpThreshold}%)`);
-    logTradeHistory(token.symbol, `Bỏ qua: Biên độ giá (${pumpPercent.toFixed(2)}%) < ${config.tradingPumpThreshold}%`, { pumpPercent });
     return {
       executed: false,
       reason: `Biên độ giá (${pumpPercent.toFixed(2)}%) < ${config.tradingPumpThreshold}%`,
