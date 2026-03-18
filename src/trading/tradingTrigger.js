@@ -126,6 +126,12 @@ export async function checkAndExecuteTrade(token) {
   console.log(`   🎯 [${token.symbol}] Chiến thuật ${strategyResult.strategy} thỏa mãn: ${strategyResult.result.reason}`);
   console.log(`   💰 [${token.symbol}] Volume mục tiêu: ${strategyResult.volumePercent}% tài khoản`);
 
+  // Ghi log khi chiến thuật thỏa mãn
+  logTradeHistory(token.symbol, `Chiến thuật ${strategyResult.strategy} thỏa mãn: ${strategyResult.result.reason}`, {
+    strategy: strategyResult.strategy,
+    volumePercent: strategyResult.volumePercent
+  });
+
   // Kiểm tra đã vào lệnh gần đây chưa
   if (hasRecentOrder(token.symbol, strategyResult.strategy)) {
     logTradeHistory(token.symbol, 'Đã vào lệnh cho symbol này trong vòng 1 giờ gần đây', { strategy: strategyResult.strategy });

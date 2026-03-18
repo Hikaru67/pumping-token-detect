@@ -130,6 +130,7 @@ export const config = {
   tradingEnabled: process.env.TRADING_ENABLED === 'true', // Bật/tắt trading tự động
   tradingLeverage: parseInt(process.env.TRADING_LEVERAGE || '2', 10), // Đòn bẩy (mặc định: 2x)
   tradingFundingRateThreshold: parseFloat(process.env.TRADING_FUNDING_RATE_THRESHOLD || '-0.5', 10), // Ngưỡng funding rate (ví dụ: -0.5 = -0.5%)
+  tradingFundingCollectCycleSkip: parseInt(process.env.TRADING_FUNDING_COLLECT_CYCLE_SKIP || '1', 10), // Bỏ qua nếu chu kỳ trả funding là X giờ (mặc định: 1h)
   tradingPumpThreshold: parseFloat(process.env.TRADING_PUMP_THRESHOLD || '30', 10), // Ngưỡng pump % (ví dụ: 30 = 30%)
 
   // Volume % cho từng chiến thuật

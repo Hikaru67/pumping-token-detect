@@ -8,6 +8,7 @@ import {
 } from '../api/bingxService.js';
 import { config } from '../config.js';
 import { getBaseSymbol } from '../utils/symbolUtils.js';
+import { fetchFundingRateHistory } from '../api/apiClient.js';
 
 /**
  * Láy volume (kích thước) của vị thế SHORT đang mở cho một token
@@ -248,12 +249,24 @@ export async function checkPreTradeConditions(token, fundingRateThreshold, pumpT
 
   // 1. Kiểm tra funding rate
   const fundingRate = await getBingxFundingRate(baseSymbol);
-  if (fundingRate !== null && fundingRate <= fundingRateThreshold) {
-    return {
-      canTrade: false,
-      reason: `Funding rate quá âm: ${(fundingRate * 100).toFixed(2)}% <= ${(fundingRateThreshold * 100).toFixed(2)}%`,
-      fundingRate,
-    };
+
+  // Kiểm tra chu kỳ funding từ MEXC
+  const rawSymbol = token.symbol; // Symbol gốc từ MEXC (ví dụ POLYX_USDT)
+  const mexcFundingHistory = await fetchFundingRateHistory(rawSymbol);
+
+  if (mexcFundingHistory && mexcFundingHistory.length > 0) {
+    const latestFunding = mexcFundingHistory[0];
+    const collectCycle = latestFunding.collectCycle; // Chu kỳ trả (1h, 4h, 8h...)
+    const mexcFundingRate = latestFunding.fundingRate; // Tỉ lệ funding thực tế từ MEXC
+
+    // Nếu chu kỳ trả là 1h (config) và funding rate quá âm
+    if (collectCycle === config.tradingFundingCollectCycleSkip && (mexcFundingRate * 100) <= fundingRateThreshold) {
+      return {
+        canTrade: false,
+        reason: `Bỏ qua: Funding cycle quá ngắn (${collectCycle}h) và rate quá âm (${(mexcFundingRate * 100).toFixed(4)}% <= ${fundingRateThreshold}%)`,
+        fundingRate: mexcFundingRate,
+      };
+    }
   }
 
   // 2. Kiểm tra symbol có trên BingX không
@@ -262,16 +275,6 @@ export async function checkPreTradeConditions(token, fundingRateThreshold, pumpT
     return {
       canTrade: false,
       reason: `Symbol ${baseSymbol} không tồn tại trên BingX`,
-      fundingRate,
-    };
-  }
-
-  // 3. Kiểm tra giá pump
-  const pumpOk = checkPumpPercentage(token, pumpThreshold);
-  if (!pumpOk) {
-    return {
-      canTrade: false,
-      reason: `Pump % (${(token.riseFallRate * 100).toFixed(2)}%) < threshold (${pumpThreshold}%)`,
       fundingRate,
     };
   }
