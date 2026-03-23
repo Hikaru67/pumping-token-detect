@@ -16,18 +16,13 @@ import { logTradeHistory } from './tradeLogger.js';
 const executedOrders = new Map(); // key: symbol, value: { timestamp, strategy, volume }
 
 /**
-/**
- * Kiểm tra xem đã vào lệnh cho symbol này chưa (trong vòng 1 giờ)
+ * Kiểm tra xem đã vào lệnh cho symbol này chưa (trong vòng 1 giờ cho cùng 1 chiến thuật)
  * @param {string} symbol - Symbol
  * @param {number} strategy - Chiến thuật đang xét
- * @returns {boolean} true nếu đã vào lệnh gần đây
+ * @returns {boolean} true nếu đã vào lệnh gần đây cho chiến thuật này
  */
 function hasRecentOrder(symbol, strategy) {
-  // Bỏ qua block lệnh 1 giờ nếu đang thực hiện Chiến thuật 4 (nhồi lệnh)
-  if (strategy === 4) {
-    return false;
-  }
-
+  // Ở đây chặn spam 1 chiến thuật duy nhất trong 1 giờ.
   const baseSymbol = getBaseSymbol(symbol);
   const order = executedOrders.get(baseSymbol);
 
@@ -43,7 +38,13 @@ function hasRecentOrder(symbol, strategy) {
     return false;
   }
 
-  return true;
+  // Chỉ block 1 giờ đối với chiến thuật bị trùng (ví dụ S1 cứ nổ hoài).
+  // Nếu tín hiệu mạnh lên thành S5 hoặc S4 thì vẫn cho đi qua.
+  if (order.strategy === strategy) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -218,27 +219,44 @@ export async function checkAndExecuteTrade(token) {
 
   let finalEntryVolume = targetEntryVolume;
 
-  // Cập nhật logic nhồi lệnh (Strategy 4)
-  if (strategyResult.strategy === 4) {
-    const _baseSymbol = getBaseSymbol(token.symbol);
-    const { getOpenPositionVolume } = await import('./tradingService.js');
-    const currentOpenVol = await getOpenPositionVolume(_baseSymbol);
+  // Cấu hình khối lượng quy định tối đa (mặc định S4 hoặc cứng 30%)
+  const maxVolumePercent = config.tradingStrategy4VolumePercent || 30;
+  const maxAllowedVolume = calculateEntryVolume(
+    accountBalance,
+    maxVolumePercent,
+    config.tradingLeverage
+  );
 
-    if (currentOpenVol > 0) {
-      console.log(`   📈 [${token.symbol}] [Strategy 4] Vị thế SHORT hiện tại: ${currentOpenVol}`);
-      finalEntryVolume = targetEntryVolume - currentOpenVol;
+  // Lấy volume hiện hành trên vị thế SHORT
+  const _baseSymbol = getBaseSymbol(token.symbol);
+  const { getOpenPositionVolume } = await import('./tradingService.js');
+  const currentOpenVol = await getOpenPositionVolume(_baseSymbol);
 
-      // Safety check (Nếu volume hiện tại đã vượt volume max mục tiêu thì báo ko vào)
-      if (finalEntryVolume <= 0) {
-        console.log(`   ⏭️  [${token.symbol}] [Strategy 4] Bỏ qua: Volume mở (${currentOpenVol}) đã đạt khối lượng của hệ thống quy định (${targetEntryVolume})`);
-        logTradeHistory(token.symbol, 'Strategy 4: Đã đạt full volume theo quy định', { currentOpenVol, targetEntryVolume });
-        return {
-          executed: false,
-          reason: 'Đã đạt full volume theo quy định',
-          orderResult: null,
-          fundingRate: preTradeCheck.fundingRate,
-        };
-      }
+  if (currentOpenVol > 0) {
+    console.log(`   📈 [${token.symbol}] Vị thế SHORT hiện tại đang mở: ${currentOpenVol.toFixed(8)}`);
+
+    // 1. Kiểm tra nếu volume bằng hoạch vượt quá 30% tài khoản thì gác lại
+    if (currentOpenVol >= maxAllowedVolume) {
+      console.log(`   ⏭️  [${token.symbol}] Bỏ qua: Volume mở (${currentOpenVol}) đã kịch trần quy định tối đa (${maxAllowedVolume} = ${maxVolumePercent}% tk)`);
+      logTradeHistory(token.symbol, `Bỏ qua: Lệnh đã đạt giới hạn tối đa (${maxVolumePercent}%)`, { currentOpenVol, maxAllowedVolume });
+      return {
+        executed: false,
+        reason: `Đã đạt full rổ lệnh tối đa (${maxVolumePercent}% tài khoản)`,
+        orderResult: null,
+        fundingRate: preTradeCheck.fundingRate,
+      };
+    }
+
+    // 2. Chống nhồi dư volume (ví dụ S2 đòi vô 10% nhưng dư địa chỉ còn 5% mới đủ 30%)
+    if (currentOpenVol + finalEntryVolume > maxAllowedVolume) {
+      finalEntryVolume = maxAllowedVolume - currentOpenVol;
+      console.log(`   ⚠️  [${token.symbol}] Ghìm volume: Chỉ vào thêm ${finalEntryVolume.toFixed(8)} để lệnh không quá ${maxAllowedVolume}`);
+    }
+
+    // 3. Với S4 chuyên nhồi tẹt thì fill cho đủ nốt 30% 
+    if (strategyResult.strategy === 4) {
+      finalEntryVolume = maxAllowedVolume - currentOpenVol;
+      console.log(`   🚨 [${token.symbol}] [Strategy 4] Gắn rát đẩy volume lên limit = ${finalEntryVolume.toFixed(8)}`);
     }
   }
 
