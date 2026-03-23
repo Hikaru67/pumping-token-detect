@@ -27,7 +27,8 @@ export async function getOpenPositionVolume(symbol) {
       );
 
       if (shortPosition) {
-        return parseFloat(shortPosition.positionAmt || shortPosition.volume || '0');
+        // Trả về positionValue (giá trị USDT) thay vì positionAmt (số lượng token)
+        return parseFloat(shortPosition.positionValue || '0');
       }
     }
     return 0;
@@ -192,11 +193,11 @@ export function checkPumpPercentage(token, pumpThreshold) {
 /**
  * Đặt lệnh SHORT trên BingX
  * @param {string} symbol - Symbol (ví dụ: BTC-USDT)
- * @param {number} volume - Volume vào lệnh
+ * @param {number} quantity - Số lượng TÓKEN (size) vào lệnh
  * @param {number} leverage - Đòn bẩy (mặc định: 2)
  * @returns {Promise<Object>} Kết quả đặt lệnh
  */
-export async function placeShortOrder(symbol, volume, leverage = 2) {
+export async function placeShortOrder(symbol, quantity, leverage = 2) {
   try {
     // Normalize symbol
     const normalizedSymbol = symbol.includes('-') ? symbol : `${symbol}-USDT`;
@@ -206,13 +207,13 @@ export async function placeShortOrder(symbol, volume, leverage = 2) {
       symbol: normalizedSymbol.toUpperCase(),
       side: 'SELL', // SHORT position
       type: 'MARKET', // Market order
-      quantity: volume.toString(),
+      quantity: quantity.toString(),
       leverage: leverage,
       marginMode: 'CROSSED', // Cross margin
       positionSide: 'SHORT', // SHORT position
     };
 
-    console.log(`📤 Đang đặt lệnh SHORT: ${normalizedSymbol}, Volume: ${volume}, Leverage: ${leverage}x`);
+    console.log(`📤 Đang đặt lệnh SHORT: ${normalizedSymbol}, Quantity (Tokens): ${quantity}, Leverage: ${leverage}x`);
 
     const result = await placeBingxSwapOrder(orderPayload);
 
@@ -221,7 +222,7 @@ export async function placeShortOrder(symbol, volume, leverage = 2) {
       success: true,
       orderId: result.orderId || result.id,
       symbol: normalizedSymbol,
-      volume,
+      volume: quantity, // Vẫn trả về field volume để tương thích logic log cũ bên trigger
       leverage,
       result,
     };
@@ -231,7 +232,7 @@ export async function placeShortOrder(symbol, volume, leverage = 2) {
       success: false,
       error: error.message,
       symbol,
-      volume,
+      volume: quantity,
       leverage,
     };
   }

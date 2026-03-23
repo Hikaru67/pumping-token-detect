@@ -162,7 +162,9 @@ export async function checkAndExecuteTrade(token) {
 
   console.log(`   ✅ [${token.symbol}] Điều kiện trước vào lệnh OK (Funding rate: ${preTradeCheck.fundingRate ? (preTradeCheck.fundingRate * 100).toFixed(4) + '%' : 'N/A'})`);
 
-  // Lấy giá hiện tại (nến M1 mới nhất) để check xem có bị xả mạnh trước khi vào lệnh không
+  // Lấy giá hiện tại (nến M1 mới nhất) thao tác kiểm tra giá xả và chuẩn bị convert size lệnh ra Token
+  let currentExecutionPrice = token.lastPrice;
+  
   try {
     const currentKline = await fetchKlineData(token.symbol, 'Min1', 2);
     if (currentKline && currentKline.close && currentKline.close.length > 0) {
@@ -170,6 +172,7 @@ export async function checkAndExecuteTrade(token) {
       const currentPrice = parseFloat(currentPriceStr);
       
       if (!isNaN(currentPrice) && token.lastPrice) {
+        currentExecutionPrice = currentPrice;
         // dropPercent: Tính tỷ lệ giá rơi từ token.lastPrice xuống currentPrice 
         const dropPercent = ((token.lastPrice - currentPrice) / token.lastPrice) * 100;
         
@@ -271,13 +274,27 @@ export async function checkAndExecuteTrade(token) {
     };
   }
 
-  console.log(`   📊 [${token.symbol}] Volume vào lệnh (sau đòn bẩy ${config.tradingLeverage}x): ${finalEntryVolume.toFixed(8)}`);
+  // Chuyển đổi Volume (USDT Notional Value) sang Quantity (Lượng Token) để gọi API BingX
+  // Quantity = (Margin * Leverage) / Khớp Giá Hiện Tại
+  let finalTokenQuantity = finalEntryVolume / currentExecutionPrice;
+  
+  // Làm tròn để tránh API từ chối do quá nhiều số thập phân
+  if (finalTokenQuantity > 100) {
+    finalTokenQuantity = Math.floor(finalTokenQuantity);
+  } else if (finalTokenQuantity > 10) {
+    finalTokenQuantity = parseFloat(finalTokenQuantity.toFixed(2));
+  } else {
+    finalTokenQuantity = parseFloat(finalTokenQuantity.toFixed(4));
+  }
+
+  console.log(`   📊 [${token.symbol}] Kế hoạch Notional Volume trích lập: ${finalEntryVolume.toFixed(2)} USDT (Leverage ${config.tradingLeverage}x)`);
+  console.log(`   🔢 [${token.symbol}] Số lượng Quantity (Tokens) chuyển đổi ra để vào lệnh: ${finalTokenQuantity}`);
 
   // Đặt lệnh SHORT
   const baseSymbol = getBaseSymbol(token.symbol);
   const orderResult = await placeShortOrder(
     baseSymbol,
-    finalEntryVolume,
+    finalTokenQuantity,
     config.tradingLeverage
   );
 
