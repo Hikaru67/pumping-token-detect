@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { checkAllStrategies } from './strategyChecker.js';
+import { fetchKlineData } from '../api/apiClient.js';
 import {
   checkPreTradeConditions,
   getAccountBalance,
@@ -160,7 +161,36 @@ export async function checkAndExecuteTrade(token) {
 
   console.log(`   ✅ [${token.symbol}] Điều kiện trước vào lệnh OK (Funding rate: ${preTradeCheck.fundingRate ? (preTradeCheck.fundingRate * 100).toFixed(4) + '%' : 'N/A'})`);
 
-  console.log(`   ✅ [${token.symbol}] Điều kiện trước vào lệnh OK (Funding rate: ${preTradeCheck.fundingRate ? (preTradeCheck.fundingRate * 100).toFixed(4) + '%' : 'N/A'})`);
+  // Lấy giá hiện tại (nến M1 mới nhất) để check xem có bị xả mạnh trước khi vào lệnh không
+  try {
+    const currentKline = await fetchKlineData(token.symbol, 'Min1', 2);
+    if (currentKline && currentKline.close && currentKline.close.length > 0) {
+      const currentPriceStr = currentKline.close[currentKline.close.length - 1];
+      const currentPrice = parseFloat(currentPriceStr);
+      
+      if (!isNaN(currentPrice) && token.lastPrice) {
+        // dropPercent: Tính tỷ lệ giá rơi từ token.lastPrice xuống currentPrice 
+        const dropPercent = ((token.lastPrice - currentPrice) / token.lastPrice) * 100;
+        
+        if (dropPercent >= 3) {
+          console.log(`   ❌ [${token.symbol}] Bỏ qua lệnh: Giá đã xả ${dropPercent.toFixed(2)}% so với lúc lấy tín hiệu (M1: ${currentPrice}, Khởi điểm: ${token.lastPrice})`);
+          logTradeHistory(token.symbol, `Bỏ qua lệnh: Giá xả ${dropPercent.toFixed(2)}% (M1: ${currentPrice}, Check: ${token.lastPrice})`, {
+            strategy: strategyResult.strategy,
+          });
+          return {
+            executed: false,
+            reason: `Giá bị xả >3% trước khi vào lệnh (M1: ${currentPrice}, Check: ${token.lastPrice})`,
+            orderResult: null,
+            fundingRate: preTradeCheck.fundingRate,
+          };
+        }
+        
+        console.log(`   ✅ [${token.symbol}] Chênh lệch giá an toàn: ${dropPercent.toFixed(2)}% (M1: ${currentPrice}, Khởi điểm: ${token.lastPrice})`);
+      }
+    }
+  } catch (err) {
+    console.warn(`   ⚠️  [${token.symbol}] Lỗi khi lấy nến M1 để kiểm tra giá xả, tiếp tục xử lý...: ${err.message}`);
+  }
 
   // Lấy số dư tài khoản
   const accountBalance = await getAccountBalance();

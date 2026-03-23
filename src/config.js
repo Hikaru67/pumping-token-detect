@@ -137,6 +137,7 @@ export const config = {
   tradingStrategy1VolumePercent: parseFloat(process.env.TRADING_STRATEGY1_VOLUME_PERCENT || '2', 10), // 2% tài khoản
   tradingStrategy2VolumePercent: parseFloat(process.env.TRADING_STRATEGY2_VOLUME_PERCENT || '10', 10), // 10% tài khoản
   tradingStrategy3VolumePercent: parseFloat(process.env.TRADING_STRATEGY3_VOLUME_PERCENT || '1', 10), // 1% tài khoản
+  tradingStrategy5VolumePercent: parseFloat(process.env.TRADING_STRATEGY5_VOLUME_PERCENT || '15', 10), // 15% tài khoản
 };
 
 // Validate required config
