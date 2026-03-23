@@ -114,7 +114,6 @@ export async function checkAndExecuteTrade(token) {
 
   if (!strategyResult.strategy) {
     console.log(`   ⏭️  [${token.symbol}] Không có chiến thuật nào thỏa mãn: ${strategyResult.result.reason}`);
-    logTradeHistory(token.symbol, `Không có chiến thuật nào thỏa mãn: ${strategyResult.result.reason}`);
     return {
       executed: false,
       reason: strategyResult.result.reason,
