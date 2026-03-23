@@ -402,14 +402,26 @@ export async function checkAllStrategies(token) {
   // Check Strategy 3
   const strategy3Result = await checkStrategy3(token);
   if (strategy3Result.matched) {
-    await appendSignalLog(
-      `[${token.symbol || 'UNKNOWN'}] Chiến thuật 3 THỎA MÃN: ${strategy3Result.reason}`
-    );
-    return {
-      strategy: 3,
-      result: strategy3Result,
-      volumePercent: config.tradingStrategy3VolumePercent || 1, // 1% tài khoản
-    };
+    const { getBaseSymbol } = await import('../utils/symbolUtils.js');
+    const { getOpenPositionVolume } = await import('./tradingService.js');
+    const _baseSymbol = getBaseSymbol(token.symbol);
+    const currentOpenVol = await getOpenPositionVolume(_baseSymbol);
+
+    if (currentOpenVol > 0) {
+      // Đã có vị thế mở, không thỏa mãn S3 nữa để giảm spam log check
+      await appendSignalLog(
+        `[${token.symbol || 'UNKNOWN'}] Chiến thuật 3 BẦN CÙNG BỎ QUA: Đã có lệnh mở nhồi sẵn (${currentOpenVol})`
+      );
+    } else {
+      await appendSignalLog(
+        `[${token.symbol || 'UNKNOWN'}] Chiến thuật 3 THỎA MÃN: ${strategy3Result.reason}`
+      );
+      return {
+        strategy: 3,
+        result: strategy3Result,
+        volumePercent: config.tradingStrategy3VolumePercent || 1, // 1% tài khoản
+      };
+    }
   }
 
   await appendSignalLog(
