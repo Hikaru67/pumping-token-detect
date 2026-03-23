@@ -295,10 +295,10 @@ export async function checkStrategy4(token) {
  * Chiến thuật 5 (Blow-off Top / Macro Overheat): 
  * Khi đạt super overbought (>= 90) ở khung 1h, 4h, 8h, 1d
  * Khung nhỏ (5m, 15m) đạt >= 85 nhưng chưa tới 90
- * Có nến đảo chiều khung 5m hoặc 15m
+ * KHÔNG CẦN nến đảo chiều
  * Vào lệnh 15% tài khoản
  * @param {Object} token - Token object có RSI data
- * @returns {Promise<Object>} { matched: boolean, reason: string, reversalTimeframes: Array<string> }
+ * @returns {Promise<Object>} { matched: boolean, reason: string }
  */
 export async function checkStrategy5(token) {
   if (!token || !token.rsi || typeof token.rsi !== 'object') {
@@ -332,31 +332,9 @@ export async function checkStrategy5(token) {
     };
   }
 
-  // Kiểm tra nến đảo chiều ở khung 5m hoặc 15m (sử dụng cache)
-  const reversalResult = await checkReversalSignalCached(token, ['Min5', 'Min15']);
-
-  if (!reversalResult.hasSignal || reversalResult.timeframes.length === 0) {
-    return {
-      matched: false,
-      reason: 'Chưa có nến đảo chiều ở khung 5m hoặc 15m',
-    };
-  }
-
-  const validReversalTimeframes = reversalResult.timeframes.filter(tf =>
-    ['Min5', 'Min15'].includes(tf)
-  );
-
-  if (validReversalTimeframes.length === 0) {
-    return {
-      matched: false,
-      reason: 'Nến đảo chiều không ở khung 5m hoặc 15m',
-    };
-  }
-
   return {
     matched: true,
-    reason: `Chiến thuật 5 (Blow-off Top): Macro Overheat (H1-D1 >= 90), Micro Exhaustion (M5/15 >= 85), có nến đảo chiều ${validReversalTimeframes.join(', ')}`,
-    reversalTimeframes: validReversalTimeframes,
+    reason: `Chiến thuật 5 (Blow-off Top): Macro Overheat (H1-D1 >= 90), Micro Exhaustion (M5/15 >= 85) (Không chờ nến)`,
   };
 }
 
@@ -395,7 +373,7 @@ export async function checkAllStrategies(token) {
     };
   }
 
-  // Check Strategy 5 (Cần nến đảo chiều)
+  // Check Strategy 5 (Không cần nến đảo chiều)
   const strategy5Result = await checkStrategy5(token);
   if (strategy5Result.matched) {
     await appendSignalLog(
