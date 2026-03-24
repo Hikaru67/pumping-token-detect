@@ -11,6 +11,7 @@ import { countSuperOverboughtRSI } from '../utils/dataProcessor.js';
 import { getBaseSymbol } from '../utils/symbolUtils.js';
 import { sendAutoTradeNotification } from '../telegram/telegramBot.js';
 import { logTradeHistory } from './tradeLogger.js';
+import { placeTakeProfitOrders, updateTakeProfitOrders, getTPState } from './takeProfitService.js';
 
 // Lưu trữ các lệnh đã vào để tránh vào lệnh trùng lặp
 const executedOrders = new Map(); // key: symbol, value: { timestamp, strategy, volume }
@@ -327,6 +328,30 @@ export async function checkAndExecuteTrade(token) {
       .catch(error => {
         console.warn(`   ⚠️  [${token.symbol}] Lỗi khi gửi thông báo auto trade:`, error.message);
       });
+
+    // Đặt Take Profit orders (async, không block luồng chính)
+    if (config.tpEnabled) {
+      const pumpPercent = token.riseFallRate || 0; // riseFallRate là decimal (0.50 = 50%)
+      const existingTPState = getTPState(baseSymbol);
+
+      if (existingTPState) {
+        // Đã có TP state → nhồi lệnh, cần update TP orders theo avg price mới
+        console.log(`   🔄 [${token.symbol}] Phát hiện nhồi lệnh, cập nhật TP orders...`);
+        updateTakeProfitOrders(baseSymbol, pumpPercent)
+          .then(() => console.log(`   ✅ [${token.symbol}] Đã cập nhật TP orders`))
+          .catch(err => console.warn(`   ⚠️  [${token.symbol}] Lỗi cập nhật TP:`, err.message));
+      } else {
+        // Lần đầu vào lệnh → đặt TP mới
+        placeTakeProfitOrders(
+          baseSymbol,
+          currentExecutionPrice,
+          finalTokenQuantity,
+          pumpPercent
+        )
+          .then(() => console.log(`   ✅ [${token.symbol}] Đã đặt TP orders`))
+          .catch(err => console.warn(`   ⚠️  [${token.symbol}] Lỗi đặt TP:`, err.message));
+      }
+    }
 
     return tradeResult;
   } else {

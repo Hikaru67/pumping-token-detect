@@ -1091,3 +1091,100 @@ export async function sendStrategyCheckingLog(logEntry) {
   }
 }
 
+/**
+ * Format thông báo Take Profit orders đã đặt / cập nhật
+ */
+function formatTakeProfitMessage(tpData) {
+  const { symbol, avgEntryPrice, pumpPercent, totalQty, levels = [], isUpdate } = tpData;
+  const timestamp = new Date().toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+
+  const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
+  const action = isUpdate ? '🔄 *CẬP NHẬT TP* \\(nhồi lệnh\\)' : '🎯 *ĐẶT TAKE PROFIT*';
+
+  let message = `${action}\n\n`;
+  message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+  message += `📍 *Avg Entry:* ${avgEntryPrice}\n`;
+  message += `📈 *Pump:* \\+${(pumpPercent * 100).toFixed(1)}%\n`;
+  message += `📦 *Tổng qty:* ${totalQty}\n\n`;
+  message += `📊 *Các mức Take Profit:*\n`;
+  levels.forEach(({ level, price, qty, profitPercent }) => {
+    message += `   TP${level}: @ ${price} \\| ${qty} qty \\| profit ~${profitPercent.toFixed(1)}%\n`;
+  });
+  message += `\n⏰ ${timestamp}`;
+  return message;
+}
+
+/**
+ * Gửi thông báo TP orders đã được đặt / cập nhật vào auto-trade topic
+ * @param {Object} tpData - { symbol, avgEntryPrice, pumpPercent, totalQty, levels, isUpdate }
+ * @returns {Promise<boolean>}
+ */
+export async function sendTakeProfitNotification(tpData) {
+  if (!config.telegramBotToken || !config.telegramGroupId || !config.telegramAutoTradeTopicId) {
+    return false;
+  }
+  try {
+    const message = formatTakeProfitMessage(tpData);
+    const success = await sendToTelegramChat(
+      config.telegramGroupId,
+      message,
+      config.telegramAutoTradeTopicId,
+      false
+    );
+    if (success) {
+      console.log(`✅ Đã gửi thông báo TP orders cho ${tpData.symbol}`);
+    }
+    return success;
+  } catch (error) {
+    console.error('❌ Lỗi khi gửi Telegram TP notification:', error.message);
+    return false;
+  }
+}
+
+/**
+ * Gửi thông báo khi SL đã được kéo về entry price (breakeven)
+ * @param {Object} data - { symbol, entryPrice, remainingQty, slOrderId }
+ * @returns {Promise<boolean>}
+ */
+export async function sendBreakevenSLNotification(data) {
+  if (!config.telegramBotToken || !config.telegramGroupId || !config.telegramAutoTradeTopicId) {
+    return false;
+  }
+  try {
+    const { symbol, entryPrice, remainingQty, slOrderId } = data;
+    const timestamp = new Date().toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+
+    const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
+    let message = `🛡️ *SL KÉO VỀ BREAKEVEN*\n\n`;
+    message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+    message += `✅ *TP1 đã khớp\\!* Kéo SL về entry price\n`;
+    message += `📍 *SL Price:* ${entryPrice} \\(entry\\)\n`;
+    message += `📦 *Qty còn lại:* ${remainingQty}\n`;
+    if (slOrderId) {
+      message += `🆔 *SL Order ID:* ${escapeMarkdown(String(slOrderId))}\n`;
+    }
+    message += `\n⏰ ${timestamp}`;
+
+    const success = await sendToTelegramChat(
+      config.telegramGroupId,
+      message,
+      config.telegramAutoTradeTopicId,
+      false
+    );
+    if (success) {
+      console.log(`✅ Đã gửi thông báo SL breakeven cho ${symbol}`);
+    }
+    return success;
+  } catch (error) {
+    console.error('❌ Lỗi khi gửi Telegram SL breakeven notification:', error.message);
+    return false;
+  }
+}

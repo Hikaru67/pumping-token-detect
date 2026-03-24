@@ -138,6 +138,21 @@ export const config = {
   tradingStrategy2VolumePercent: parseFloat(process.env.TRADING_STRATEGY2_VOLUME_PERCENT || '10', 10), // 10% tài khoản
   tradingStrategy3VolumePercent: parseFloat(process.env.TRADING_STRATEGY3_VOLUME_PERCENT || '1', 10), // 1% tài khoản
   tradingStrategy5VolumePercent: parseFloat(process.env.TRADING_STRATEGY5_VOLUME_PERCENT || '15', 10), // 15% tài khoản
+
+  // Take Profit Configuration
+  tpEnabled: process.env.TP_ENABLED === 'true', // Bật/tắt take profit tự động
+  // TP level ratios: TP_price = avg_entry × (1 - pump% × ratio)
+  tpRatio1: parseFloat(process.env.TP_RATIO_1 || '0.20'), // TP1 tại pump% × 20%
+  tpRatio2: parseFloat(process.env.TP_RATIO_2 || '0.40'), // TP2 tại pump% × 40%
+  tpRatio3: parseFloat(process.env.TP_RATIO_3 || '0.80'), // TP3 tại pump% × 80%
+  // % position đóng tại mỗi TP level (tổng phải = 100)
+  tpClosePercent1: parseFloat(process.env.TP_CLOSE_PERCENT_1 || '30'), // Đóng 30% tại TP1
+  tpClosePercent2: parseFloat(process.env.TP_CLOSE_PERCENT_2 || '30'), // Đóng 30% tại TP2
+  tpClosePercent3: parseFloat(process.env.TP_CLOSE_PERCENT_3 || '40'), // Đóng 40% tại TP3
+  // Tự động kéo SL về entry khi TP1 khớp
+  tpBreakevenSlEnabled: process.env.TP_BREAKEVEN_SL_ENABLED !== 'false', // Mặc định bật
+  // Chu kỳ monitor TP1 fill status để đặt SL breakeven (ms)
+  tpMonitorIntervalMs: parseInt(process.env.TP_MONITOR_INTERVAL_MS || '60000', 10),
 };
 
 // Validate required config

@@ -124,7 +124,7 @@ export async function callBingxApi({
     queryString = queryString ? `${queryString}&signature=${signature}` : `signature=${signature}`;
   }
 
-  const url = normalizedMethod === 'GET' && queryString
+  const url = (normalizedMethod === 'GET' || normalizedMethod === 'DELETE') && queryString
     ? `${baseUrl}${endpoint}?${queryString}`
     : `${baseUrl}${endpoint}`;
 
@@ -135,7 +135,7 @@ export async function callBingxApi({
     timeout: config.bingxApiTimeout || 15000,
   };
 
-  if (normalizedMethod !== 'GET') {
+  if (normalizedMethod === 'POST' || normalizedMethod === 'PUT') {
     axiosConfig.data = queryString;
     axiosConfig.headers['Content-Type'] = 'application/x-www-form-urlencoded';
   }
@@ -349,6 +349,63 @@ export async function getBingxOrderHistory(params = {}) {
     ...params,
   };
   return callBingxPrivateApi('/openApi/swap/v2/trade/allOrders', query);
+}/**
+ * Hủy một lệnh pending theo orderId
+ * Docs: https://bingx-api.github.io/docs/swapV2/trade-api.html#cancel-order
+ * @param {string} symbol - Ví dụ: BTC-USDT
+ * @param {string|number} orderId - Order ID cần hủy
+ */
+export async function cancelBingxOrder(symbol, orderId) {
+  if (!symbol) throw new Error('cancelBingxOrder: Thiếu symbol.');
+  if (!orderId) throw new Error('cancelBingxOrder: Thiếu orderId.');
+  return callBingxPrivateApi('/openApi/swap/v2/trade/order', { symbol, orderId }, 'DELETE');
+}
+
+/**
+ * Hủy tất cả lệnh pending của một symbol
+ * Docs: https://bingx-api.github.io/docs/swapV2/trade-api.html#cancel-all-open-orders
+ * @param {string} symbol - Ví dụ: BTC-USDT
+ */
+export async function cancelAllBingxOrders(symbol) {
+  if (!symbol) throw new Error('cancelAllBingxOrders: Thiếu symbol.');
+  return callBingxPrivateApi('/openApi/swap/v2/trade/allOpenOrders', { symbol }, 'DELETE');
+}
+
+/**
+ * Lấy danh sách lệnh đang chờ khớp (pending) của một symbol
+ * Docs: https://bingx-api.github.io/docs/swapV2/trade-api.html#current-all-open-orders
+ * @param {string} [symbol] - Symbol (optional, nếu không truyền lấy tất cả)
+ */
+export async function getBingxOpenOrders(symbol) {
+  const params = symbol ? { symbol } : {};
+  return callBingxPrivateApi('/openApi/swap/v2/trade/openOrders', params);
+}
+
+/**
+ * Lấy thông tin tickSize (bước giá tối thiểu) của một symbol
+ * Dùng để làm tròn giá TP trước khi đặt LIMIT order
+ * @param {string} symbol - Ví dụ: BTC-USDT
+ * @returns {Promise<number|null>} tickSize hoặc null nếu không tìm thấy
+ */
+export async function getSymbolTickSize(symbol) {
+  try {
+    const normalizedSymbol = symbol.includes('-') ? symbol.toUpperCase() : `${symbol.toUpperCase()}-USDT`;
+    const data = await callBingxPublicApi('/openApi/swap/v2/quote/contracts');
+    if (!Array.isArray(data)) return null;
+    const contract = data.find(c => (c.symbol || '').toUpperCase() === normalizedSymbol);
+    if (!contract) return null;
+
+    // BingX v2 trả về pricePrecision là số chữ số thập phân (e.g. 4 cho 0.0001)
+    if (contract.pricePrecision !== undefined && contract.pricePrecision !== null) {
+      const precision = parseInt(contract.pricePrecision, 10);
+      return 1 / Math.pow(10, precision);
+    }
+
+    return null;
+  } catch (error) {
+    console.warn(`⚠️  Không lấy được tickSize cho ${symbol}:`, error.message);
+    return null;
+  }
 }
 
 
