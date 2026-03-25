@@ -174,9 +174,17 @@ export async function checkStrategy2(token) {
     };
   }
 
+  // Thêm điều kiện: RSI H8 >= 80
+  if (!isOverbought80(token.rsi, 'Hour8')) {
+    return {
+      matched: false,
+      reason: 'RSI H8 chưa đạt 80+',
+    };
+  }
+
   return {
     matched: true,
-    reason: `Chiến thuật 2: Chiến thuật 1 thỏa mãn + ${superOverboughtCount} RSI super overbought`,
+    reason: `Chiến thuật 2: S1 thỏa mãn + H8 >= 80 + ${superOverboughtCount} RSI >= 90`,
     superOverboughtCount,
   };
 }
