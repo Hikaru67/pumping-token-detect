@@ -176,21 +176,30 @@ export async function checkAndExecuteTrade(token) {
         currentExecutionPrice = currentPrice;
         // dropPercent: Tính tỷ lệ giá rơi từ token.lastPrice xuống currentPrice 
         const dropPercent = ((token.lastPrice - currentPrice) / token.lastPrice) * 100;
-        
-        if (dropPercent >= 3) {
-          console.log(`   ❌ [${token.symbol}] Bỏ qua lệnh: Giá đã xả ${dropPercent.toFixed(2)}% so với lúc lấy tín hiệu (M1: ${currentPrice}, Khởi điểm: ${token.lastPrice})`);
-          logTradeHistory(token.symbol, `Bỏ qua lệnh: Giá xả ${dropPercent.toFixed(2)}% (M1: ${currentPrice}, Check: ${token.lastPrice})`, {
+
+        // So sánh tỷ lệ drop/pump: nếu ratio >= tradingDropPumpRatioThreshold thì bỏ qua lệnh
+        // Ví dụ: pump 50%, xả 5% => ratio = 5/50 = 0.10 < 0.15 => KHÔNG bỏ qua
+        // Ví dụ: pump 30%, xả 6% => ratio = 6/30 = 0.20 >= 0.15 => BỎ QUA
+        const dropPumpRatio = pumpPercent > 0 ? dropPercent / pumpPercent : 0;
+        const dropPumpRatioThreshold = config.tradingDropPumpRatioThreshold;
+
+        if (dropPercent > 0 && dropPumpRatio >= dropPumpRatioThreshold) {
+          console.log(`   ❌ [${token.symbol}] Bỏ qua lệnh: Tỷ lệ xả/pump = ${dropPumpRatio.toFixed(3)} (xả ${dropPercent.toFixed(2)}% / pump ${pumpPercent.toFixed(2)}%) >= ngưỡng ${dropPumpRatioThreshold} (M1: ${currentPrice}, Khởi điểm: ${token.lastPrice})`);
+          logTradeHistory(token.symbol, `Bỏ qua lệnh: Tỷ lệ xả/pump ${dropPumpRatio.toFixed(3)} >= ${dropPumpRatioThreshold} (xả ${dropPercent.toFixed(2)}%, pump ${pumpPercent.toFixed(2)}%)`, {
             strategy: strategyResult.strategy,
+            dropPercent,
+            pumpPercent,
+            dropPumpRatio,
           });
           return {
             executed: false,
-            reason: `Giá bị xả >3% trước khi vào lệnh (M1: ${currentPrice}, Check: ${token.lastPrice})`,
+            reason: `Tỷ lệ giá xả/pump (${dropPumpRatio.toFixed(3)}) >= ngưỡng ${dropPumpRatioThreshold} (xả ${dropPercent.toFixed(2)}%, pump ${pumpPercent.toFixed(2)}%)`,
             orderResult: null,
             fundingRate: preTradeCheck.fundingRate,
           };
         }
         
-        console.log(`   ✅ [${token.symbol}] Chênh lệch giá an toàn: ${dropPercent.toFixed(2)}% (M1: ${currentPrice}, Khởi điểm: ${token.lastPrice})`);
+        console.log(`   ✅ [${token.symbol}] Chênh lệch giá an toàn: xả ${dropPercent.toFixed(2)}%, pump ${pumpPercent.toFixed(2)}%, ratio ${dropPumpRatio.toFixed(3)} < ${dropPumpRatioThreshold} (M1: ${currentPrice}, Khởi điểm: ${token.lastPrice})`);
       }
     }
   } catch (err) {

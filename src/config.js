@@ -132,6 +132,9 @@ export const config = {
   tradingFundingRateThreshold: parseFloat(process.env.TRADING_FUNDING_RATE_THRESHOLD || '-0.5', 10), // Ngưỡng funding rate (ví dụ: -0.5 = -0.5%)
   tradingFundingCollectCycleSkip: parseInt(process.env.TRADING_FUNDING_COLLECT_CYCLE_SKIP || '1', 10), // Bỏ qua nếu chu kỳ trả funding là X giờ (mặc định: 1h)
   tradingPumpThreshold: parseFloat(process.env.TRADING_PUMP_THRESHOLD || '30', 10), // Ngưỡng pump % (ví dụ: 30 = 30%)
+  // Tỷ lệ giá xả / giá pump tối thiểu để bỏ qua lệnh (ví dụ: pump 50%, xả 5% => ratio 5/50 = 0.10 < 0.15 => KHÔNG bỏ qua)
+  // Nếu ratio >= ngưỡng này thì bỏ qua lệnh (giá xả quá nhiều so với mức pump)
+  tradingDropPumpRatioThreshold: parseFloat(process.env.TRADING_DROP_PUMP_RATIO_THRESHOLD || '0.15'), // Mặc định: 0.15
 
   // Volume % cho từng chiến thuật
   tradingStrategy1VolumePercent: parseFloat(process.env.TRADING_STRATEGY1_VOLUME_PERCENT || '2', 10), // 2% tài khoản
