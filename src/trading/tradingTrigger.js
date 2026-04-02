@@ -134,13 +134,21 @@ export async function checkAndExecuteTrade(token) {
   });
 
   // Kiểm tra đã vào lệnh gần đây chưa
+  // Chỉ áp dụng cooldown 1 giờ nếu hiện tại vẫn còn vị thế đang mở.
+  // Nếu lệnh đã đóng hoàn toàn thì cho phép vào lại ngay, không cần chờ.
   if (hasRecentOrder(token.symbol, strategyResult.strategy)) {
-    logTradeHistory(token.symbol, 'Đã vào lệnh cho symbol này trong vòng 1 giờ gần đây', { strategy: strategyResult.strategy });
-    return {
-      executed: false,
-      reason: 'Đã vào lệnh cho symbol này trong vòng 1 giờ gần đây',
-      orderResult: null,
-    };
+    const { getOpenPositionVolume: _getOpenVol } = await import('./tradingService.js');
+    const _currentVol = await _getOpenVol(getBaseSymbol(token.symbol));
+    if (_currentVol > 0) {
+      logTradeHistory(token.symbol, 'Đã vào lệnh cho symbol này trong vòng 1 giờ gần đây (vị thế vẫn đang mở)', { strategy: strategyResult.strategy });
+      return {
+        executed: false,
+        reason: 'Đã vào lệnh cho symbol này trong vòng 1 giờ gần đây',
+        orderResult: null,
+      };
+    }
+    // Không còn vị thế → bỏ qua cooldown, tiếp tục xử lý
+    console.log(`   ℹ️  [${token.symbol}] Đã từng vào lệnh trong 1 giờ qua nhưng vị thế đã đóng → bỏ qua cooldown`);
   }
 
   // Kiểm tra các điều kiện trước khi vào lệnh
