@@ -362,6 +362,18 @@ export async function cancelBingxOrder(symbol, orderId) {
 }
 
 /**
+ * Lấy trạng thái của một lệnh cụ thể
+ * Docs: https://bingx-api.github.io/docs/swapV2/trade/order.html
+ * @param {string} symbol - Ví dụ: BTC-USDT
+ * @param {string|number} orderId - Order ID cần query
+ */
+export async function getBingxOrderStatus(symbol, orderId) {
+  if (!symbol) throw new Error('getBingxOrderStatus: Thiếu symbol.');
+  if (!orderId) throw new Error('getBingxOrderStatus: Thiếu orderId.');
+  return callBingxPrivateApi('/openApi/swap/v2/trade/order', { symbol, orderId }, 'GET');
+}
+
+/**
  * Hủy tất cả lệnh pending của một symbol
  * Docs: https://bingx-api.github.io/docs/swapV2/trade-api.html#cancel-all-open-orders
  * @param {string} symbol - Ví dụ: BTC-USDT

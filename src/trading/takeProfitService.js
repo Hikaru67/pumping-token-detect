@@ -312,24 +312,49 @@ export async function checkTPState() {
         }
 
         if (!tp1StillOpen) {
-          // TP1 không còn trong open orders → đã fill (hoặc bị cancel)
-          // Kiểm tra position còn mở không để phân biệt fill vs cancel
-          const positions = await getBingxOpenPositions(symbol);
-          const stillOpen = Array.isArray(positions)
-            ? positions.some(p => p.symbol === symbol && p.positionSide === 'SHORT'
-                && Math.abs(parseFloat(p.positionAmt || '0')) > 0)
-            : false;
+          // TP1 không còn trong open orders → có thể do khớp (FILLED), bị huỷ (CANCELED/REJECTED), hoặc lỗi delay của API BingX (Eventual Consistency)
+          // => Phải lấy status cụ thể của lệnh đó để chắc chắn nó đã FILLED.
+          
+          let isActuallyFilled = false;
+          try {
+            const { getBingxOrderStatus } = await import('../api/bingxService.js');
+            const orderInfo = await getBingxOrderStatus(symbol, tp1OrderId);
+            const status = orderInfo?.order?.status || orderInfo?.status;
+            
+            if (status === 'FILLED') {
+              isActuallyFilled = true;
+            } else if (status === 'CANCELED' || status === 'FAILED' || status === 'REJECTED') {
+              console.log(`   ℹ️  [${baseSymbol}] TP1 (ID ${tp1OrderId}) bị huỷ/từ chối (status=${status}), huỷ theo dõi TP...`);
+              tpStateMap.delete(baseSymbol);
+              continue;
+            } else if (!status) {
+              console.warn(`   ⚠️  [${baseSymbol}] Không tìm thấy TP1 status, có thể do delay API, đợi lấy lại...`);
+            } else {
+              // Vẫn là NEW, PENDING, PARTIALLY_FILLED... -> Tức là API openOrders bị lag nên không thấy
+              console.log(`   ⏳ [${baseSymbol}] TP1 (ID ${tp1OrderId}) thực tế vẫn là ${status} nhưng chưa hiện trong list openOrders (API delay)`);
+            }
+          } catch (err) {
+            console.warn(`   ⚠️  [${baseSymbol}] Lỗi query status TP1 (ID ${tp1OrderId}):`, err.message);
+          }
 
-          if (stillOpen) {
-            console.log(`   ✅ [${baseSymbol}] TP1 đã khớp! Sẽ đặt SL breakeven...`);
+          if (isActuallyFilled) {
+            console.log(`   ✅ [${baseSymbol}] Lệnh TP1 đã khớp hoàn toàn (FILLED)! Sẽ đặt SL breakeven...`);
             state.tp1Filled = true;
             if (config.tpBreakevenSlEnabled) {
               await placeBreakevenStopLoss(baseSymbol, state);
             }
           } else {
-            // Position đóng hết rồi → cleanup
-            console.log(`   ℹ️  [${baseSymbol}] Position đã đóng hoàn toàn, cleanup TP state`);
-            tpStateMap.delete(baseSymbol);
+            // Lệnh chưa FILLED hoặc API delay nhưng ta vẫn cần chắc chắn position còn sống không (ví dụ dính SL tổng hoặc tự đóng tay)
+            const positions = await getBingxOpenPositions(symbol);
+            const stillOpen = Array.isArray(positions)
+              ? positions.some(p => p.symbol === symbol && p.positionSide === 'SHORT'
+                  && Math.abs(parseFloat(p.positionAmt || '0')) > 0)
+              : false;
+
+            if (!stillOpen) {
+              console.log(`   ℹ️  [${baseSymbol}] Lệnh TP1 chưa khớp nhưng Position đã đóng hoàn toàn, cleanup TP state`);
+              tpStateMap.delete(baseSymbol);
+            }
           }
         } else {
           console.log(`   ⏳ [${baseSymbol}] TP1 chưa khớp (còn trong open orders)`);
