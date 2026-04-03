@@ -51,7 +51,7 @@ export function roundToTickSize(price, tickSize) {
 
 /**
  * Tính 3 mức giá TP dựa trên avg entry price và pump %
- * TP_price = avgEntryPrice × (1 - pumpPercent × tpRatio)
+ * TP_price = avgEntryPrice × (1 - dropRatio)
  *
  * @param {number} avgEntryPrice - Giá entry trung bình
  * @param {number} pumpPercent   - Pump % (0.50 = 50%)
@@ -60,9 +60,17 @@ export function roundToTickSize(price, tickSize) {
  */
 export function calculateTPLevels(avgEntryPrice, pumpPercent, tickSize = null) {
   const absPump = Math.abs(pumpPercent);
-  const tp1Price = roundToTickSize(avgEntryPrice * (1 - absPump * config.tpRatio1), tickSize);
-  const tp2Price = roundToTickSize(avgEntryPrice * (1 - absPump * config.tpRatio2), tickSize);
-  const tp3Price = roundToTickSize(avgEntryPrice * (1 - absPump * config.tpRatio3), tickSize);
+  
+  // Tỷ lệ drop tối đa cho phép là 99% (để tránh giá <= 0 khi pump > 100%)
+  const maxDrop = 0.99;
+  const dropRatio1 = Math.min(absPump * config.tpRatio1, maxDrop);
+  const dropRatio2 = Math.min(absPump * config.tpRatio2, maxDrop);
+  const dropRatio3 = Math.min(absPump * config.tpRatio3, maxDrop);
+
+  const tp1Price = roundToTickSize(avgEntryPrice * (1 - dropRatio1), tickSize);
+  const tp2Price = roundToTickSize(avgEntryPrice * (1 - dropRatio2), tickSize);
+  const tp3Price = roundToTickSize(avgEntryPrice * (1 - dropRatio3), tickSize);
+  
   return { tp1Price, tp2Price, tp3Price };
 }
 
@@ -92,13 +100,20 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
   const baseSymbol = getBaseSymbol(symbol);
 
   const tickSize = await getSymbolTickSize(normalizedSymbol);
+  
+  const absPump = Math.abs(pumpPercent);
+  const maxDrop = 0.99;
+  const dropRatio1 = Math.min(absPump * config.tpRatio1, maxDrop);
+  const dropRatio2 = Math.min(absPump * config.tpRatio2, maxDrop);
+  const dropRatio3 = Math.min(absPump * config.tpRatio3, maxDrop);
+
   const { tp1Price, tp2Price, tp3Price } = calculateTPLevels(avgEntryPrice, pumpPercent, tickSize);
   const { qty1, qty2, qty3 } = calculateTPQuantities(totalQty);
 
   console.log(`\n📐 [${symbol}] Tính mức TP (pump ${(pumpPercent * 100).toFixed(1)}%, entry ${avgEntryPrice}):`);
-  console.log(`   TP1: ${(config.tpClosePercent1)}% qty (${qty1}) @ ${tp1Price} (profit ${(config.tpRatio1 * pumpPercent * 100).toFixed(2)}%)`);
-  console.log(`   TP2: ${(config.tpClosePercent2)}% qty (${qty2}) @ ${tp2Price} (profit ${(config.tpRatio2 * pumpPercent * 100).toFixed(2)}%)`);
-  console.log(`   TP3: ${(config.tpClosePercent3)}% qty (${qty3}) @ ${tp3Price} (profit ${(config.tpRatio3 * pumpPercent * 100).toFixed(2)}%)`);
+  console.log(`   TP1: ${(config.tpClosePercent1)}% qty (${qty1}) @ ${tp1Price} (profit ${(dropRatio1 * 100).toFixed(2)}%)`);
+  console.log(`   TP2: ${(config.tpClosePercent2)}% qty (${qty2}) @ ${tp2Price} (profit ${(dropRatio2 * 100).toFixed(2)}%)`);
+  console.log(`   TP3: ${(config.tpClosePercent3)}% qty (${qty3}) @ ${tp3Price} (profit ${(dropRatio3 * 100).toFixed(2)}%)`);
 
   const levels = [
     { level: 1, price: tp1Price, qty: qty1 },
@@ -150,9 +165,9 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
     pumpPercent,
     totalQty,
     levels: [
-      { level: 1, price: tp1Price, qty: qty1, profitPercent: config.tpRatio1 * pumpPercent * 100 },
-      { level: 2, price: tp2Price, qty: qty2, profitPercent: config.tpRatio2 * pumpPercent * 100 },
-      { level: 3, price: tp3Price, qty: qty3, profitPercent: config.tpRatio3 * pumpPercent * 100 },
+      { level: 1, price: tp1Price, qty: qty1, profitPercent: dropRatio1 * 100 },
+      { level: 2, price: tp2Price, qty: qty2, profitPercent: dropRatio2 * 100 },
+      { level: 3, price: tp3Price, qty: qty3, profitPercent: dropRatio3 * 100 },
     ],
     isUpdate: false,
   }).catch(err => console.warn(`⚠️  [${symbol}] Lỗi gửi Telegram TP:`, err.message));
