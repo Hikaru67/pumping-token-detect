@@ -60,9 +60,9 @@ export function roundToTickSize(price, tickSize) {
  */
 export function calculateTPLevels(avgEntryPrice, pumpPercent, tickSize = null) {
   const absPump = Math.abs(pumpPercent);
-  
+
   // Tỷ lệ drop tối đa cho phép là 99% (để tránh giá <= 0 khi pump > 100%)
-  const maxDrop = 0.99;
+  const maxDrop = 0.8;
   const dropRatio1 = Math.min(absPump * config.tpRatio1, maxDrop);
   const dropRatio2 = Math.min(absPump * config.tpRatio2, maxDrop);
   const dropRatio3 = Math.min(absPump * config.tpRatio3, maxDrop);
@@ -70,7 +70,7 @@ export function calculateTPLevels(avgEntryPrice, pumpPercent, tickSize = null) {
   const tp1Price = roundToTickSize(avgEntryPrice * (1 - dropRatio1), tickSize);
   const tp2Price = roundToTickSize(avgEntryPrice * (1 - dropRatio2), tickSize);
   const tp3Price = roundToTickSize(avgEntryPrice * (1 - dropRatio3), tickSize);
-  
+
   return { tp1Price, tp2Price, tp3Price };
 }
 
@@ -100,7 +100,7 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
   const baseSymbol = getBaseSymbol(symbol);
 
   const tickSize = await getSymbolTickSize(normalizedSymbol);
-  
+
   const absPump = Math.abs(pumpPercent);
   const maxDrop = 0.99;
   const dropRatio1 = Math.min(absPump * config.tpRatio1, maxDrop);
@@ -329,13 +329,13 @@ export async function checkTPState() {
         if (!tp1StillOpen) {
           // TP1 không còn trong open orders → có thể do khớp (FILLED), bị huỷ (CANCELED/REJECTED), hoặc lỗi delay của API BingX (Eventual Consistency)
           // => Phải lấy status cụ thể của lệnh đó để chắc chắn nó đã FILLED.
-          
+
           let isActuallyFilled = false;
           try {
             const { getBingxOrderStatus } = await import('../api/bingxService.js');
             const orderInfo = await getBingxOrderStatus(symbol, tp1OrderId);
             const status = orderInfo?.order?.status || orderInfo?.status;
-            
+
             if (status === 'FILLED') {
               isActuallyFilled = true;
             } else if (status === 'CANCELED' || status === 'FAILED' || status === 'REJECTED') {
@@ -363,7 +363,7 @@ export async function checkTPState() {
             const positions = await getBingxOpenPositions(symbol);
             const stillOpen = Array.isArray(positions)
               ? positions.some(p => p.symbol === symbol && p.positionSide === 'SHORT'
-                  && Math.abs(parseFloat(p.positionAmt || '0')) > 0)
+                && Math.abs(parseFloat(p.positionAmt || '0')) > 0)
               : false;
 
             if (!stillOpen) {
@@ -379,7 +379,7 @@ export async function checkTPState() {
         const positions = await getBingxOpenPositions(symbol);
         const stillOpen = Array.isArray(positions)
           ? positions.some(p => p.symbol === symbol && p.positionSide === 'SHORT'
-              && Math.abs(parseFloat(p.positionAmt || '0')) > 0)
+            && Math.abs(parseFloat(p.positionAmt || '0')) > 0)
           : false;
         if (!stillOpen) {
           tpStateMap.delete(baseSymbol);
