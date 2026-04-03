@@ -190,7 +190,7 @@ export async function checkStrategy2(token) {
 }
 
 /**
- * Chiến thuật 3: Khi đạt super overbought ở khung 1h, 4h, 8h nhưng các khung bé 5m, 15m, 30m vẫn chưa đạt 80+
+ * Chiến thuật 3: Khi đạt super overbought ở khung 30m, 1h, 4h, 8h nhưng các khung bé 5m, 15m vẫn chưa đạt 80+
  * Chỉ vào 1% tài khoản khi có nến đảo chiều khung 5m, 15m
  * @param {Object} token - Token object có RSI data
  * @returns {Promise<Object>} { matched: boolean, reason: string, reversalTimeframes: Array<string> }
@@ -202,25 +202,25 @@ export async function checkStrategy3(token) {
 
   const rsiData = token.rsi;
 
-  // Kiểm tra super overbought ở khung lớn: 1h, 4h, 8h
-  const largeTimeframes = ['Hour1', 'Hour4', 'Hour8'];
+  // Kiểm tra super overbought ở khung lớn: 30m, 1h, 4h, 8h
+  const largeTimeframes = ['Min30', 'Hour1', 'Hour4', 'Hour8'];
   const superOverboughtLarge = largeTimeframes.filter(tf => isSuperOverbought(rsiData, tf));
 
   if (superOverboughtLarge.length === 0) {
     return {
       matched: false,
-      reason: 'Chưa có RSI super overbought ở khung lớn (1h, 4h, 8h)',
+      reason: 'Chưa có RSI super overbought ở khung lớn (30m, 1h, 4h, 8h)',
     };
   }
 
-  // Kiểm tra các khung bé 5m, 15m, 30m chưa đạt 80+
-  const smallTimeframes = ['Min5', 'Min15', 'Min30'];
+  // Kiểm tra các khung bé 5m, 15m chưa đạt 80+
+  const smallTimeframes = ['Min5', 'Min15'];
   const overbought80Small = smallTimeframes.filter(tf => isOverbought80(rsiData, tf));
 
   if (overbought80Small.length > 0) {
     return {
       matched: false,
-      reason: `Các khung bé đã đạt 80+: ${overbought80Small.join(', ')}`,
+      reason: `Các khung bé (5m, 15m) đã đạt 80+: ${overbought80Small.join(', ')}`,
     };
   }
 
