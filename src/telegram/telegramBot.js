@@ -15,13 +15,16 @@ function cleanSymbol(symbol) {
 }
 
 /**
- * Escape Markdown special characters
+ * Escape Markdown special characters (Dành cho Markdown V1)
+ * Markdown V1 chỉ parse các ký tự: *, _, [, ], `
+ * Việc cẩn thận escape các ký tự khác (như +, -, (, ), .) sẽ khiến nó in ra thành chuỗi backslash thuần (\+, \-).
  * @param {string} text - Text cần escape
  * @returns {string} Text đã escape
  */
 function escapeMarkdown(text) {
   if (typeof text !== 'string') return '';
-  return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+  // Chỉ escape: _ * [ ] `
+  return text.replace(/([_*\[\]`])/g, '\\$1');
 }
 
 /**
