@@ -1191,3 +1191,48 @@ export async function sendBreakevenSLNotification(data) {
     return false;
   }
 }
+
+/**
+ * Gửi thông báo khi một mức Take Profit (TP) đã được khớp
+ * @param {Object} data - { symbol, level, tpOrderId, price }
+ * @returns {Promise<boolean>}
+ */
+export async function sendTakeProfitFilledNotification(data) {
+  if (!config.telegramBotToken || !config.telegramGroupId || !config.telegramAutoTradeTopicId) {
+    return false;
+  }
+  try {
+    const { symbol, level, tpOrderId, price } = data;
+    const timestamp = new Date().toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+
+    const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
+    let message = `🎯 *TAKE PROFIT ${level} KHỚP*\n\n`;
+    message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+    message += `✅ *Chúc mừng:* TP${level} của mã này đã được chốt hoàn toàn\\!\n`;
+    if (price) {
+      message += `📍 *Giá khớp:* ${price}\n`;
+    }
+    if (tpOrderId) {
+      message += `🆔 *Order ID:* ${escapeMarkdown(String(tpOrderId))}\n`;
+    }
+    message += `\n⏰ ${timestamp}`;
+
+    const success = await sendToTelegramChat(
+      config.telegramGroupId,
+      message,
+      config.telegramAutoTradeTopicId,
+      false
+    );
+    if (success) {
+      console.log(`✅ Đã gửi thông báo TP${level} khớp cho ${symbol}`);
+    }
+    return success;
+  } catch (error) {
+    console.error(`❌ Lỗi khi gửi Telegram TP${data.level} filled notification:`, error.message);
+    return false;
+  }
+}

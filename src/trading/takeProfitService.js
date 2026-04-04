@@ -10,6 +10,7 @@ import { getBaseSymbol } from '../utils/symbolUtils.js';
 import {
   sendTakeProfitNotification,
   sendBreakevenSLNotification,
+  sendTakeProfitFilledNotification,
 } from '../telegram/telegramBot.js';
 
 /**
@@ -23,7 +24,12 @@ import {
  *   tp1OrderId,     // Order ID lệnh TP1
  *   tp2OrderId,     // Order ID lệnh TP2
  *   tp3OrderId,     // Order ID lệnh TP3
+ *   tp1Price,       // Giá TP1
+ *   tp2Price,       // Giá TP2
+ *   tp3Price,       // Giá TP3
  *   tp1Filled,      // TP1 đã khớp chưa
+ *   tp2Filled,      // TP2 đã khớp chưa
+ *   tp3Filled,      // TP3 đã khớp chưa
  *   slPlaced,       // SL breakeven đã đặt chưa
  *   slOrderId,      // Order ID SL
  * }
@@ -102,7 +108,7 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
   const tickSize = await getSymbolTickSize(normalizedSymbol);
 
   const absPump = Math.abs(pumpPercent);
-  const maxDrop = 0.99;
+  const maxDrop = 0.8;
   const dropRatio1 = Math.min(absPump * config.tpRatio1, maxDrop);
   const dropRatio2 = Math.min(absPump * config.tpRatio2, maxDrop);
   const dropRatio3 = Math.min(absPump * config.tpRatio3, maxDrop);
@@ -153,7 +159,12 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
     pumpPercent,
     totalQty,
     ...orderIds,
+    tp1Price,
+    tp2Price,
+    tp3Price,
     tp1Filled: false,
+    tp2Filled: false,
+    tp3Filled: false,
     slPlaced: false,
     slOrderId: null,
   });
@@ -306,85 +317,101 @@ export async function checkTPState() {
 
   for (const [baseSymbol, state] of tpStateMap.entries()) {
     try {
-      const { symbol, tp1Filled, slPlaced, tp1OrderId } = state;
+      const { symbol, slPlaced } = state;
 
-      // Nếu TP1 đã fill và SL chưa đặt → đặt SL breakeven
-      if (tp1Filled && !slPlaced && config.tpBreakevenSlEnabled) {
+      // Đặt SL breakeven nếu TP1 đã khớp và SL chưa đặt
+      if (state.tp1Filled && !slPlaced && config.tpBreakevenSlEnabled) {
         await placeBreakevenStopLoss(baseSymbol, state);
-        continue;
       }
 
-      // Nếu TP1 chưa fill → check bằng open orders
-      if (!tp1Filled && tp1OrderId) {
-        let tp1StillOpen = false;
-        try {
-          const openOrders = await getBingxOpenOrders(symbol);
-          const ordersArr = Array.isArray(openOrders) ? openOrders : (openOrders?.orders || []);
-          tp1StillOpen = ordersArr.some(o => String(o.orderId || o.id) === String(tp1OrderId));
-        } catch (err) {
-          console.warn(`   ⚠️  [${baseSymbol}] Lỗi check open orders:`, err.message);
-          continue;
-        }
+      let openOrders = null;
+      let ordersArr = null;
+      let checkOpenOrdersFailed = false;
 
-        if (!tp1StillOpen) {
-          // TP1 không còn trong open orders → có thể do khớp (FILLED), bị huỷ (CANCELED/REJECTED), hoặc lỗi delay của API BingX (Eventual Consistency)
-          // => Phải lấy status cụ thể của lệnh đó để chắc chắn nó đã FILLED.
+      // Lấy danh sách open orders 1 lần cho cả 3 mức TP để tiết kiệm API call
+      try {
+        openOrders = await getBingxOpenOrders(symbol);
+        ordersArr = Array.isArray(openOrders) ? openOrders : (openOrders?.orders || []);
+      } catch (err) {
+        console.warn(`   ⚠️  [${baseSymbol}] Lỗi check open orders:`, err.message);
+        checkOpenOrdersFailed = true;
+      }
 
-          let isActuallyFilled = false;
-          try {
-            const { getBingxOrderStatus } = await import('../api/bingxService.js');
-            const orderInfo = await getBingxOrderStatus(symbol, tp1OrderId);
-            const status = orderInfo?.order?.status || orderInfo?.status;
+      if (checkOpenOrdersFailed) continue;
 
-            if (status === 'FILLED') {
-              isActuallyFilled = true;
-            } else if (status === 'CANCELED' || status === 'FAILED' || status === 'REJECTED') {
-              console.log(`   ℹ️  [${baseSymbol}] TP1 (ID ${tp1OrderId}) bị huỷ/từ chối (status=${status}), huỷ theo dõi TP...`);
-              tpStateMap.delete(baseSymbol);
-              continue;
-            } else if (!status) {
-              console.warn(`   ⚠️  [${baseSymbol}] Không tìm thấy TP1 status, có thể do delay API, đợi lấy lại...`);
-            } else {
-              // Vẫn là NEW, PENDING, PARTIALLY_FILLED... -> Tức là API openOrders bị lag nên không thấy
-              console.log(`   ⏳ [${baseSymbol}] TP1 (ID ${tp1OrderId}) thực tế vẫn là ${status} nhưng chưa hiện trong list openOrders (API delay)`);
+      // Duyệt qua các mức TP (1, 2, 3)
+      for (let level = 1; level <= 3; level++) {
+        const orderIdKey = `tp${level}OrderId`;
+        const filledKey = `tp${level}Filled`;
+        const priceKey = `tp${level}Price`;
+
+        const tpOrderId = state[orderIdKey];
+        const isFilled = state[filledKey];
+
+        if (!isFilled && tpOrderId) {
+          const tpStillOpen = ordersArr.some(o => String(o.orderId || o.id) === String(tpOrderId));
+
+          if (!tpStillOpen) {
+            // Lệnh không còn trong mảng open orders -> Lấy status cụ thể bằng API
+            let isActuallyFilled = false;
+            try {
+              const { getBingxOrderStatus } = await import('../api/bingxService.js');
+              const orderInfo = await getBingxOrderStatus(symbol, tpOrderId);
+              const status = orderInfo?.order?.status || orderInfo?.status;
+
+              if (status === 'FILLED') {
+                isActuallyFilled = true;
+              } else if (status === 'CANCELED' || status === 'FAILED' || status === 'REJECTED') {
+                console.log(`   ℹ️  [${baseSymbol}] TP${level} (ID ${tpOrderId}) bị huỷ/từ chối (status=${status})`);
+                state[orderIdKey] = null; // Bỏ theo dõi TP này để khỏi check nữa
+              } else if (!status) {
+                console.warn(`   ⚠️  [${baseSymbol}] Không tìm thấy TP${level} status, đợi lấy lại...`);
+              } else {
+                console.log(`   ⏳ [${baseSymbol}] TP${level} (ID ${tpOrderId}) thực tế vẫn là ${status} nhưng chưa hiện trong list openOrders`);
+              }
+            } catch (err) {
+              console.warn(`   ⚠️  [${baseSymbol}] Lỗi query status TP${level} (ID ${tpOrderId}):`, err.message);
             }
-          } catch (err) {
-            console.warn(`   ⚠️  [${baseSymbol}] Lỗi query status TP1 (ID ${tp1OrderId}):`, err.message);
-          }
 
-          if (isActuallyFilled) {
-            console.log(`   ✅ [${baseSymbol}] Lệnh TP1 đã khớp hoàn toàn (FILLED)! Sẽ đặt SL breakeven...`);
-            state.tp1Filled = true;
-            if (config.tpBreakevenSlEnabled) {
-              await placeBreakevenStopLoss(baseSymbol, state);
+            if (isActuallyFilled) {
+              console.log(`   ✅ [${baseSymbol}] Lệnh TP${level} đã khớp hoàn toàn (FILLED)!`);
+              state[filledKey] = true;
+
+              // Gửi báo cáo TP khớp qua vi-VN Telegram
+              sendTakeProfitFilledNotification({
+                symbol: baseSymbol,
+                level,
+                tpOrderId,
+                price: state[priceKey]
+              }).catch(err => console.warn(`⚠️ Lỗi gửi Telegram TP${level} filled:`, err.message));
+
+              // Nếu là TP1 => trigger S/L
+              if (level === 1 && config.tpBreakevenSlEnabled && !state.slPlaced) {
+                await placeBreakevenStopLoss(baseSymbol, state);
+              }
             }
           } else {
-            // Lệnh chưa FILLED hoặc API delay nhưng ta vẫn cần chắc chắn position còn sống không (ví dụ dính SL tổng hoặc tự đóng tay)
-            const positions = await getBingxOpenPositions(symbol);
-            const stillOpen = Array.isArray(positions)
-              ? positions.some(p => p.symbol === symbol && p.positionSide === 'SHORT'
-                && Math.abs(parseFloat(p.positionAmt || '0')) > 0)
-              : false;
-
-            if (!stillOpen) {
-              console.log(`   ℹ️  [${baseSymbol}] Lệnh TP1 chưa khớp nhưng Position đã đóng hoàn toàn, cleanup TP state`);
-              tpStateMap.delete(baseSymbol);
-            }
+             console.log(`   ⏳ [${baseSymbol}] TP${level} chưa khớp (còn trong open orders)`);
           }
-        } else {
-          console.log(`   ⏳ [${baseSymbol}] TP1 chưa khớp (còn trong open orders)`);
-        }
-      } else if (!tp1OrderId) {
-        // Không có TP1 order ID → kiểm tra position còn sống không
-        const positions = await getBingxOpenPositions(symbol);
-        const stillOpen = Array.isArray(positions)
-          ? positions.some(p => p.symbol === symbol && p.positionSide === 'SHORT'
-            && Math.abs(parseFloat(p.positionAmt || '0')) > 0)
-          : false;
-        if (!stillOpen) {
-          tpStateMap.delete(baseSymbol);
         }
       }
+
+      // Check xem liệu vị thế (position) có còn sống không
+      // Phòng trừ bị SL cán sạch lệnh hoặc ngắt lệnh tay
+      const positions = await getBingxOpenPositions(symbol);
+      const stillOpen = Array.isArray(positions)
+        ? positions.some(p => p.symbol === symbol && p.positionSide === 'SHORT'
+          && Math.abs(parseFloat(p.positionAmt || '0')) > 0)
+        : false;
+
+      // Nếu position đã huỷ hoàn toàn, hoặc tất cả TP đã khớp
+      const allTpFilled = state.tp1Filled && state.tp2Filled && state.tp3Filled;
+
+      if (!stillOpen || allTpFilled) {
+        console.log(`   ℹ️  [${baseSymbol}] Position đã đóng hoàn toàn hoặc All TPs Filled, cleanup TP state`);
+        tpStateMap.delete(baseSymbol);
+      }
+
     } catch (err) {
       console.warn(`   ⚠️  [${baseSymbol}] Lỗi trong TP monitor:`, err.message);
     }
