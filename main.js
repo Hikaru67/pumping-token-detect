@@ -1,5 +1,6 @@
 import { startScheduler } from './src/schedulers/scheduler.js';
 import { startDropScheduler } from './src/schedulers/dropScheduler.js';
+import { startTakeProfitScheduler } from './src/schedulers/takeProfitScheduler.js';
 
 // Xử lý lỗi không bắt được
 process.on('unhandledRejection', (reason, promise) => {
@@ -29,6 +30,9 @@ console.log('='.repeat(60));
 
 // Khởi động Pump Token Scheduler
 startScheduler();
+
+// Khởi động Take Profit Scheduler (theo dõi TP1 fill để đặt SL breakeven)
+startTakeProfitScheduler();
 
 // Khởi động Drop Token Scheduler
 // off drop scheduler

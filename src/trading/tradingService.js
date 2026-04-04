@@ -3,10 +3,40 @@ import {
   checkBingxContractSymbol,
   placeBingxSwapOrder,
   getBingxSwapTickers,
-  callBingxPublicApi
+  callBingxPublicApi,
+  getBingxOpenPositions
 } from '../api/bingxService.js';
 import { config } from '../config.js';
 import { getBaseSymbol } from '../utils/symbolUtils.js';
+import { fetchFundingRateHistory } from '../api/apiClient.js';
+
+/**
+ * Láy volume (kích thước) của vị thế SHORT đang mở cho một token
+ * @param {string} symbol - Symbol (ví dụ: BTC-USDT)
+ * @returns {Promise<number>} Kích thước vị thế đang mở (số lượng token)
+ */
+export async function getOpenPositionVolume(symbol) {
+  try {
+    const normalizedSymbol = symbol.includes('-') ? symbol : `${symbol}-USDT`;
+    const positions = await getBingxOpenPositions(normalizedSymbol.toUpperCase());
+
+    if (positions && Array.isArray(positions)) {
+      // Tìm vị thế SHORT cho symbol này
+      const shortPosition = positions.find(
+        pos => pos.symbol === normalizedSymbol.toUpperCase() && pos.positionSide === 'SHORT'
+      );
+
+      if (shortPosition) {
+        // Trả về positionValue (giá trị USDT) thay vì positionAmt (số lượng token)
+        return parseFloat(shortPosition.positionValue || '0');
+      }
+    }
+    return 0;
+  } catch (error) {
+    console.warn(`⚠️  Lỗi khi lấy open position cho ${symbol}:`, error.message);
+    return 0;
+  }
+}
 
 /**
  * Lấy funding rate từ BingX
@@ -163,11 +193,11 @@ export function checkPumpPercentage(token, pumpThreshold) {
 /**
  * Đặt lệnh SHORT trên BingX
  * @param {string} symbol - Symbol (ví dụ: BTC-USDT)
- * @param {number} volume - Volume vào lệnh
+ * @param {number} quantity - Số lượng TÓKEN (size) vào lệnh
  * @param {number} leverage - Đòn bẩy (mặc định: 2)
  * @returns {Promise<Object>} Kết quả đặt lệnh
  */
-export async function placeShortOrder(symbol, volume, leverage = 2) {
+export async function placeShortOrder(symbol, quantity, leverage = 2) {
   try {
     // Normalize symbol
     const normalizedSymbol = symbol.includes('-') ? symbol : `${symbol}-USDT`;
@@ -177,13 +207,13 @@ export async function placeShortOrder(symbol, volume, leverage = 2) {
       symbol: normalizedSymbol.toUpperCase(),
       side: 'SELL', // SHORT position
       type: 'MARKET', // Market order
-      quantity: volume.toString(),
+      quantity: quantity.toString(),
       leverage: leverage,
       marginMode: 'CROSSED', // Cross margin
       positionSide: 'SHORT', // SHORT position
     };
 
-    console.log(`📤 Đang đặt lệnh SHORT: ${normalizedSymbol}, Volume: ${volume}, Leverage: ${leverage}x`);
+    console.log(`📤 Đang đặt lệnh SHORT: ${normalizedSymbol}, Quantity (Tokens): ${quantity}, Leverage: ${leverage}x`);
 
     const result = await placeBingxSwapOrder(orderPayload);
 
@@ -192,7 +222,7 @@ export async function placeShortOrder(symbol, volume, leverage = 2) {
       success: true,
       orderId: result.orderId || result.id,
       symbol: normalizedSymbol,
-      volume,
+      volume: quantity, // Vẫn trả về field volume để tương thích logic log cũ bên trigger
       leverage,
       result,
     };
@@ -202,7 +232,7 @@ export async function placeShortOrder(symbol, volume, leverage = 2) {
       success: false,
       error: error.message,
       symbol,
-      volume,
+      volume: quantity,
       leverage,
     };
   }
@@ -220,12 +250,24 @@ export async function checkPreTradeConditions(token, fundingRateThreshold, pumpT
 
   // 1. Kiểm tra funding rate
   const fundingRate = await getBingxFundingRate(baseSymbol);
-  if (fundingRate !== null && fundingRate <= fundingRateThreshold) {
-    return {
-      canTrade: false,
-      reason: `Funding rate quá âm: ${(fundingRate * 100).toFixed(2)}% <= ${(fundingRateThreshold * 100).toFixed(2)}%`,
-      fundingRate,
-    };
+
+  // Kiểm tra chu kỳ funding từ MEXC
+  const rawSymbol = token.symbol; // Symbol gốc từ MEXC (ví dụ POLYX_USDT)
+  const mexcFundingHistory = await fetchFundingRateHistory(rawSymbol);
+
+  if (mexcFundingHistory && mexcFundingHistory.length > 0) {
+    const latestFunding = mexcFundingHistory[0];
+    const collectCycle = latestFunding.collectCycle; // Chu kỳ trả (1h, 4h, 8h...)
+    const mexcFundingRate = latestFunding.fundingRate; // Tỉ lệ funding thực tế từ MEXC
+
+    // Nếu chu kỳ trả là 1h (config) và funding rate quá âm
+    if (collectCycle === config.tradingFundingCollectCycleSkip && (mexcFundingRate * 100) <= fundingRateThreshold) {
+      return {
+        canTrade: false,
+        reason: `Bỏ qua: Funding cycle quá ngắn (${collectCycle}h) và rate quá âm (${(mexcFundingRate * 100).toFixed(4)}% <= ${fundingRateThreshold}%)`,
+        fundingRate: mexcFundingRate,
+      };
+    }
   }
 
   // 2. Kiểm tra symbol có trên BingX không
@@ -234,16 +276,6 @@ export async function checkPreTradeConditions(token, fundingRateThreshold, pumpT
     return {
       canTrade: false,
       reason: `Symbol ${baseSymbol} không tồn tại trên BingX`,
-      fundingRate,
-    };
-  }
-
-  // 3. Kiểm tra giá pump
-  const pumpOk = checkPumpPercentage(token, pumpThreshold);
-  if (!pumpOk) {
-    return {
-      canTrade: false,
-      reason: `Pump % (${(token.riseFallRate * 100).toFixed(2)}%) < threshold (${pumpThreshold}%)`,
       fundingRate,
     };
   }

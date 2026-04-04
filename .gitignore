@@ -25,5 +25,4 @@ Thumbs.db
 *.swo
 
 # Tests outputs (manual or temporary)
-tests/
 docs

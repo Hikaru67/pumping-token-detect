@@ -15,13 +15,16 @@ function cleanSymbol(symbol) {
 }
 
 /**
- * Escape Markdown special characters
+ * Escape Markdown special characters (Dành cho Markdown V1)
+ * Markdown V1 chỉ parse các ký tự: *, _, [, ], `
+ * Việc cẩn thận escape các ký tự khác (như +, -, (, ), .) sẽ khiến nó in ra thành chuỗi backslash thuần (\+, \-).
  * @param {string} text - Text cần escape
  * @returns {string} Text đã escape
  */
 function escapeMarkdown(text) {
   if (typeof text !== 'string') return '';
-  return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+  // Chỉ escape: _ * [ ] `
+  return text.replace(/([_*\[\]`])/g, '\\$1');
 }
 
 /**
@@ -37,7 +40,7 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
     return '⚠️ Không có dữ liệu để hiển thị';
   }
 
-  const timestamp = new Date().toLocaleString('vi-VN', { 
+  const timestamp = new Date().toLocaleString('vi-VN', {
     timeZone: 'Asia/Ho_Chi_Minh',
     year: 'numeric',
     month: '2-digit',
@@ -48,12 +51,12 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
   });
 
   let message = '';
-  
+
   // Thêm lý do alert nếu có
   if (alertReason) {
     if (alertReason.includes('RSI Confluence tăng')) {
       message += '📊 *🚨 RSI CONFLUENCE TĂNG 🚨*\n';
-      
+
       // Hiển thị danh sách token thay đổi nếu có
       if (confluenceInfo && confluenceInfo.increases && confluenceInfo.increases.length > 0) {
         const tokenList = confluenceInfo.increases.map(increase => {
@@ -72,15 +75,15 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
   } else {
     message += '\n';
   }
-  
+
   top10.forEach((token, index) => {
     const riseFallPercent = (token.riseFallRate * 100).toFixed(2);
     const sign = token.riseFallRate >= 0 ? '+' : '';
     const lastPrice = token.lastPrice;
     const cleanSymbolName = escapeMarkdown(cleanSymbol(token.symbol));
-    
+
     message += `*#${token.rank} $${cleanSymbolName} ${lastPrice} ${sign}${riseFallPercent}%`;
-    
+
     // Thêm funding rate
     if (token.fundingRate !== undefined && token.fundingRate !== null && !isNaN(token.fundingRate)) {
       const fundingPercent = (token.fundingRate * 100).toFixed(4);
@@ -88,11 +91,11 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
       message += ` 💹 Funding Rate: ${fundingSign}${fundingPercent}%`;
     }
     message += `\n`;
-    
+
     // Hiển thị RSI - luôn hiển thị nếu có dữ liệu
     if (token.rsi && typeof token.rsi === 'object') {
       const rsiEntries = Object.entries(token.rsi).filter(([_, rsi]) => rsi !== null && !isNaN(rsi));
-      
+
       if (rsiEntries.length > 0) {
         // Sắp xếp RSI entries theo thứ tự timeframe (từ nhỏ đến lớn)
         const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Min60', 'Hour1', 'Hour4', 'Hour8', 'Day1', 'Week1', 'Month1'];
@@ -101,14 +104,14 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
           const indexB = timeframeOrder.indexOf(b[0]);
           return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
         });
-        
+
         // Tạo chuỗi RSI cho các timeframes với format ngắn gọn
         const rsiStrings = rsiEntries.map(([timeframe, rsi]) => {
           const formattedTF = formatTimeframe(timeframe);
           const status = getRSIStatus(rsi, timeframe);
           let emoji = '⚪️'; // neutral
           let rsiValue = rsi.toFixed(1);
-          
+
           if (status === 'oversold') {
             emoji = '🟢'; // oversold (có thể mua vào)
             rsiValue = `*${rsiValue}*`; // Bold cho oversold
@@ -116,10 +119,10 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
             emoji = '🔴'; // overbought (có thể bán ra)
             rsiValue = `*${rsiValue}*`; // Bold cho overbought
           }
-          
+
           return `${formattedTF}${emoji}${rsiValue}`;
         });
-        
+
         message += `📊 RSI: ${rsiStrings.join(' • ')}\n`;
       } else {
         // Nếu không có RSI data, thông báo
@@ -129,7 +132,7 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
       // Nếu không có RSI object, thông báo
       message += `📊 RSI: ⚠️ Chưa tính toán\n`;
     }
-    
+
     message += `\n`;
   });
 
@@ -152,10 +155,10 @@ function formatNumber(num) {
   if (typeof num !== 'number' || isNaN(num)) {
     return '0';
   }
-  
+
   const absNum = Math.abs(num);
   const sign = num < 0 ? '-' : '';
-  
+
   if (absNum >= 1000000000) {
     return sign + (absNum / 1000000000).toFixed(2) + 'B';
   }
@@ -181,7 +184,7 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
     return '⚠️ Không có dữ liệu để hiển thị';
   }
 
-  const timestamp = new Date().toLocaleString('vi-VN', { 
+  const timestamp = new Date().toLocaleString('vi-VN', {
     timeZone: 'Asia/Ho_Chi_Minh',
     year: 'numeric',
     month: '2-digit',
@@ -192,12 +195,12 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
   });
 
   let message = '';
-  
+
   // Thêm lý do alert nếu có
   if (alertReason) {
     if (alertReason.includes('RSI Confluence tăng')) {
       message += '⚠️ RSI CONFLUENCE TĂNG';
-      
+
       // Hiển thị danh sách token thay đổi nếu có
       if (confluenceInfo && confluenceInfo.increases && confluenceInfo.increases.length > 0) {
         const tokenList = confluenceInfo.increases.map(increase => {
@@ -216,26 +219,26 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
   } else {
     message += '\n';
   }
-  
+
   top10.forEach((token, index) => {
     const riseFallPercent = (token.riseFallRate * 100).toFixed(2);
     const sign = token.riseFallRate >= 0 ? '+' : '';
     const cleanSymbolName = escapeMarkdown(cleanSymbol(token.symbol));
-    
+
     message += `*#${token.rank} $${cleanSymbolName}*\n`;
     message += `   Biến động: *${sign}${riseFallPercent}%*\n`;
-    
+
     // Thêm funding rate
     if (token.fundingRate !== undefined && token.fundingRate !== null && !isNaN(token.fundingRate)) {
       const fundingPercent = (token.fundingRate * 100).toFixed(4);
       const fundingSign = token.fundingRate >= 0 ? '+' : '';
       message += `   Funding Rate: ${fundingSign}${fundingPercent}%\n`;
     }
-    
+
     // Hiển thị RSI - luôn hiển thị nếu có dữ liệu
     if (token.rsi && typeof token.rsi === 'object') {
       const rsiEntries = Object.entries(token.rsi).filter(([_, rsi]) => rsi !== null && !isNaN(rsi));
-      
+
       if (rsiEntries.length > 0) {
         // Sắp xếp RSI entries theo thứ tự timeframe (từ nhỏ đến lớn)
         const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Min60', 'Hour1', 'Hour4', 'Hour8', 'Day1', 'Week1', 'Month1'];
@@ -244,14 +247,14 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
           const indexB = timeframeOrder.indexOf(b[0]);
           return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
         });
-        
+
         // Tạo chuỗi RSI cho các timeframes với format đẹp hơn
         const rsiStrings = rsiEntries.map(([timeframe, rsi]) => {
           const formattedTF = formatTimeframe(timeframe);
           const status = getRSIStatus(rsi, timeframe);
           let emoji = '⚪'; // neutral
           let rsiValue = rsi.toFixed(1);
-          
+
           if (status === 'oversold') {
             emoji = '🟢'; // oversold (có thể mua vào)
             rsiValue = `*${rsiValue}*`; // Bold cho oversold
@@ -259,20 +262,20 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
             emoji = '🔴'; // overbought (có thể bán ra)
             rsiValue = `*${rsiValue}*`; // Bold cho overbought
           }
-          
+
           return `${formattedTF}${emoji}${rsiValue}`;
         });
-        
+
         message += `📊 RSI: ${rsiStrings.join(' • ')}\n`;
-        
+
         // Hiển thị confluence nếu có (nổi bật hơn)
         if (token.rsiConfluence && token.rsiConfluence.hasConfluence) {
           const confluenceEmoji = token.rsiConfluence.status === 'oversold' ? '🟢' : '🔴';
-          const confluenceText = token.rsiConfluence.status === 'oversold' 
-            ? 'OVERSOLD CONFLUENCE ⬆️' 
+          const confluenceText = token.rsiConfluence.status === 'oversold'
+            ? 'OVERSOLD CONFLUENCE ⬆️'
             : 'OVERBOUGHT CONFLUENCE ⬇️';
           const timeframesList = token.rsiConfluence.timeframes.map(tf => formatTimeframe(tf)).join(', ');
-          
+
           message += `   ${confluenceEmoji} *${confluenceText}* (${token.rsiConfluence.count} TFs: ${timeframesList})\n`;
         }
       } else {
@@ -283,15 +286,15 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
       // Nếu không có RSI object, thông báo
       message += `📊 RSI: ⚠️ Chưa tính toán\n`;
     }
-    
+
     if (token.high24Price > 0 && token.lower24Price > 0) {
       message += `   Giá 24h: ${token.lower24Price} → ${token.high24Price}\n`;
     }
-    
+
     if (token.lastPrice > 0) {
       message += `   Giá hiện tại: ${token.lastPrice}\n\n`;
     }
-    
+
     message += `   Volume 24h: ${formatNumber(token.volume24)}\n\n`;
   });
 
@@ -316,7 +319,7 @@ function formatSignalAlertMessage(signalTokens) {
     return '⚠️ Không có dữ liệu signal để hiển thị';
   }
 
-  const timestamp = new Date().toLocaleString('vi-VN', { 
+  const timestamp = new Date().toLocaleString('vi-VN', {
     timeZone: 'Asia/Ho_Chi_Minh',
     year: 'numeric',
     month: '2-digit',
@@ -327,16 +330,16 @@ function formatSignalAlertMessage(signalTokens) {
   });
 
   let message = '🔄 *🚨 TÍN HIỆU ĐẢO CHIỀU 🚨*\n\n';
-  
+
   signalTokens.forEach((item, index) => {
     const { token, signalTimeframes } = item;
     const cleanSymbolName = escapeMarkdown(cleanSymbol(token.symbol));
     const riseFallPercent = (token.riseFallRate * 100).toFixed(2);
     const sign = token.riseFallRate >= 0 ? '+' : '';
-    
+
     message += `*${index + 1}. $${cleanSymbolName}*\n`;
     message += `   Biến động: *${sign}${riseFallPercent}%*\n`;
-    
+
     // Hiển thị RSI oversold cho các timeframes có signal
     const rsiStrings = signalTimeframes.map(tf => {
       const rsi = token.rsi[tf];
@@ -344,19 +347,19 @@ function formatSignalAlertMessage(signalTokens) {
       const formattedTF = formatTimeframe(tf);
       return `${formattedTF}🟢*${rsi.toFixed(1)}*`;
     }).filter(Boolean);
-    
+
     if (rsiStrings.length > 0) {
       message += `   📊 RSI Oversold: ${rsiStrings.join(' • ')}\n\n`;
     }
-    
+
     // Hiển thị timeframes có signal
     const tfList = signalTimeframes.map(tf => formatTimeframe(tf)).join(', ');
     message += `   🔄 Tín hiệu đảo chiều: ${tfList}\n`;
-    
+
     if (token.lastPrice > 0) {
       message += `💰Giá hiện tại: ${token.lastPrice}\n\n`;
     }
-    
+
     message += `   Volume 24h: ${formatNumber(token.volume24)}\n\n`;
   });
 
@@ -386,7 +389,7 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
   }
 
   const cleanSymbolName = cleanSymbol(token.symbol);
-  const timestamp = new Date().toLocaleString('vi-VN', { 
+  const timestamp = new Date().toLocaleString('vi-VN', {
     timeZone: 'Asia/Ho_Chi_Minh',
     year: 'numeric',
     month: '2-digit',
@@ -395,9 +398,9 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
     minute: '2-digit',
     second: '2-digit'
   });
-  
+
   let message = ``;
-  
+
   // Highlight nếu có 3+ RSI >= SUPER_OVER_BOUGHT
   if (hasSuperOverbought) {
     const superOverboughtCount = metadata?.superOverboughtCount || 0;
@@ -405,18 +408,18 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
     const stars = superOverboughtCount >= 4 ? '⭐'.repeat(superOverboughtCount) : '';
     message += `🔥 *⚡ SUPER OVERBOUGHT ⚡${stars}*\n`;
   }
-  
+
   // Hiển thị tên symbol với điểm bên phải nếu có
   let symbolLine = `*$${cleanSymbolName}*`;
   if (scoreInfo && scoreInfo.total !== undefined) {
     symbolLine += ` ${scoreInfo.total.toFixed(1)}/100`;
   }
   message += `${symbolLine}\n`;
-  
+
   // Hiển thị đầy đủ tất cả RSI timeframes (giống format alert thông thường)
   if (token.rsi && typeof token.rsi === 'object') {
     const rsiEntries = Object.entries(token.rsi).filter(([_, rsi]) => rsi !== null && !isNaN(rsi));
-    
+
     if (rsiEntries.length > 0) {
       // Sắp xếp RSI entries theo thứ tự timeframe (từ nhỏ đến lớn)
       const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Min60', 'Hour1', 'Hour4', 'Hour8', 'Day1', 'Week1', 'Month1'];
@@ -425,17 +428,17 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
         const indexB = timeframeOrder.indexOf(b[0]);
         return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
       });
-      
+
       // Tạo chuỗi RSI cho các timeframes với format đẹp hơn
       const rsiStrings = rsiEntries.map(([timeframe, rsi]) => {
         const formattedTF = formatTimeframe(timeframe);
         const status = getRSIStatus(rsi, timeframe);
         let emoji = '⚪'; // neutral
         let rsiValue = rsi.toFixed(1);
-        
+
         // Đánh dấu các timeframes có signal
         const hasSignal = signalTimeframes.includes(timeframe);
-        
+
         if (status === 'oversold') {
           emoji = '🟢'; // oversold (có thể mua vào)
           rsiValue = `*${rsiValue}*`; // Bold cho oversold
@@ -443,23 +446,23 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
           emoji = '🔴'; // overbought (có thể bán ra)
           rsiValue = `*${rsiValue}*`; // Bold cho overbought
         }
-        
+
         // Thêm dấu hiệu nếu có signal đảo chiều
         const signalMark = hasSignal ? '🔄' : '';
-        
+
         return `${formattedTF}${emoji}${rsiValue}${signalMark}`;
       });
-      
+
       message += `📊 RSI: ${rsiStrings.join(' • ')}\n`;
-      
+
       // Hiển thị confluence nếu có
       if (token.rsiConfluence && token.rsiConfluence.hasConfluence) {
         const confluenceEmoji = token.rsiConfluence.status === 'oversold' ? '🟢' : '🔴';
-        const confluenceText = token.rsiConfluence.status === 'oversold' 
-          ? 'OVERSOLD CONFLUENCE ⬆️' 
+        const confluenceText = token.rsiConfluence.status === 'oversold'
+          ? 'OVERSOLD CONFLUENCE ⬆️'
           : 'OVERBOUGHT CONFLUENCE ⬇️';
         const timeframesList = token.rsiConfluence.timeframes.map(tf => formatTimeframe(tf)).join(', ');
-        
+
         message += `${confluenceEmoji} *${confluenceText}* (${token.rsiConfluence.count} TFs: ${timeframesList})\n\n`;
       }
 
@@ -467,7 +470,7 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
         const { total, components } = scoreInfo;
         message += `🎯 Score: ${total.toFixed(1)}/100 (RSI ${components.rsi.toFixed(1)} | Div ${components.divergence.toFixed(1)} | Candle ${components.candle.toFixed(1)})\n`;
       }
-      
+
       // Hiển thị timeframes có signal
       if (signalTimeframes && signalTimeframes.length > 0) {
         const tfList = signalTimeframes.map(tf => formatTimeframe(tf)).join(', ');
@@ -500,29 +503,29 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
   } else {
     message += `📊 RSI: ⚠️ Chưa tính toán\n`;
   }
-  
+
   // Thông tin giá và volume
   if (token.high24Price > 0 && token.lower24Price > 0) {
     message += `💰 Giá 24h: ${token.lower24Price} → ${token.high24Price}\n`;
   }
-  
+
   if (token.lastPrice > 0) {
     message += `💰 Giá hiện tại: ${token.lastPrice}\n\n`;
   }
-  
+
   if (token.riseFallRate !== undefined) {
     const sign = token.riseFallRate >= 0 ? '+' : '';
     const percent = Math.abs(token.riseFallRate * 100).toFixed(2);
     message += `📈 Biến động 24h: ${sign}${percent}%\n`;
   }
-  
+
   // Funding rate nếu có
   if (token.fundingRate !== undefined && token.fundingRate !== null && !isNaN(token.fundingRate)) {
     const fundingPercent = (token.fundingRate * 100).toFixed(4);
     const fundingSign = token.fundingRate >= 0 ? '+' : '';
     message += `💹 Funding Rate: ${fundingSign}${fundingPercent}%\n`;
   }
-  
+
   if (token.volume24) {
     message += `📊 Volume 24h: ${formatNumber(token.volume24)}\n`;
   }
@@ -547,7 +550,7 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
 
   message += `🏦 Binance Futures: ${binanceStatusText}\n`;
   message += `\n⏰ ${timestamp}`;
-  
+
   return message;
 }
 
@@ -576,7 +579,7 @@ export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent
   // Kiểm tra có ít nhất một destination để gửi
   const hasChannel = config.telegramChatId && config.telegramChatId.trim() !== '';
   const hasGroupTopic = config.telegramGroupId && config.telegramSignalTopicId;
-  
+
   // Kiểm tra primary signal destinations (chỉ dùng khi có super overbought)
   // Primary signal topic dùng chung group với signal thông thường (TELEGRAM_GROUP_ID)
   const hasPrimaryChannel = hasSuperOverbought && config.telegramPrimarySignalChatId && config.telegramPrimarySignalChatId.trim() !== '';
@@ -606,7 +609,7 @@ export async function sendSingleSignalAlert(token, signalTimeframes, forceSilent
       binanceInfo
     );
     const disableNotification = forceSilent ? true : config.telegramDisableNotification;
-    
+
     let channelSuccess = false;
     let topicSuccess = false;
     let primaryChannelSuccess = false;
@@ -711,7 +714,7 @@ export async function sendSignalAlert(signalTokens, forceSilent = false) {
   try {
     const message = formatSignalAlertMessage(signalTokens);
     const disableNotification = forceSilent ? true : config.telegramDisableNotification;
-    
+
     const success = await sendToTelegramChat(
       config.telegramGroupId,
       message,
@@ -756,7 +759,7 @@ async function sendToTelegramChat(chatId, message, topicId = null, disableNotifi
 
   try {
     const TELEGRAM_API_URL = `https://api.telegram.org/bot${config.telegramBotToken}`;
-    
+
     const payload = {
       chat_id: chatId,
       text: message,
@@ -764,12 +767,12 @@ async function sendToTelegramChat(chatId, message, topicId = null, disableNotifi
       disable_web_page_preview: true,
       disable_notification: disableNotification,
     };
-    
+
     // Thêm message_thread_id nếu có topic ID
     if (isValidTopicId(topicId)) {
       payload.message_thread_id = topicId;
     }
-    
+
     const response = await axios.post(
       `${TELEGRAM_API_URL}/sendMessage`,
       payload,
@@ -802,7 +805,7 @@ async function sendToTelegramChat(chatId, message, topicId = null, disableNotifi
  */
 async function sendToMultipleDestinations(message, options) {
   const { channelId, topicChatId, topicId, disableNotification, label = '' } = options;
-  
+
   const hasChannel = channelId && channelId.trim() !== '';
   const hasTopic = isValidTopicId(topicId) && topicChatId && topicChatId.trim() !== '';
 
@@ -865,7 +868,7 @@ export async function sendTelegramAlert(top10, alertReason = '', confluenceInfo 
   try {
     const message = formatAlertMessage(top10, alertReason, confluenceInfo);
     const disableNotification = forceSilent ? true : config.telegramDisableNotification;
-    
+
     return await sendToMultipleDestinations(message, {
       channelId,
       topicChatId: groupId,
@@ -914,7 +917,7 @@ export async function sendTelegramDropAlert(top10, alertReason = '', confluenceI
   try {
     const message = formatDropAlertMessage(top10, alertReason, confluenceInfo);
     const disableNotification = forceSilent ? true : config.telegramDropDisableNotification;
-    
+
     return await sendToMultipleDestinations(message, {
       channelId: dropChannelId,
       topicChatId: dropGroupId,
@@ -938,7 +941,7 @@ export async function sendTelegramDropAlert(top10, alertReason = '', confluenceI
  * @returns {string} Message đã format
  */
 function formatAutoTradeMessage(tradeResult, token) {
-  const timestamp = new Date().toLocaleString('vi-VN', { 
+  const timestamp = new Date().toLocaleString('vi-VN', {
     timeZone: 'Asia/Ho_Chi_Minh',
     year: 'numeric',
     month: '2-digit',
@@ -951,31 +954,31 @@ function formatAutoTradeMessage(tradeResult, token) {
   const cleanSymbolName = escapeMarkdown(cleanSymbol(token.symbol));
   const pumpPercent = (token.riseFallRate * 100).toFixed(2);
   const sign = token.riseFallRate >= 0 ? '+' : '';
-  
+
   let message = `🎯 *VÀO LỆNH TỰ ĐỘNG*\n\n`;
   message += `💰 *Symbol:* $${cleanSymbolName}\n`;
   message += `📊 *Chiến thuật:* ${tradeResult.strategy}\n`;
   message += `📈 *Pump:* ${sign}${pumpPercent}%\n`;
   message += `💵 *Volume:* ${tradeResult.volume?.toFixed(8) || 'N/A'}\n`;
   message += `⚡ *Leverage:* ${config.tradingLeverage}x\n`;
-  
+
   if (tradeResult.fundingRate !== null && tradeResult.fundingRate !== undefined) {
     const fundingPercent = (tradeResult.fundingRate * 100).toFixed(4);
     const fundingSign = tradeResult.fundingRate >= 0 ? '+' : '';
     message += `💹 *Funding Rate:* ${fundingSign}${fundingPercent}%\n`;
   }
-  
+
   if (tradeResult.orderResult?.orderId) {
     message += `🆔 *Order ID:* ${escapeMarkdown(tradeResult.orderResult.orderId.toString())}\n`;
   }
-  
+
   if (tradeResult.orderResult?.symbol) {
     message += `📝 *Contract:* ${escapeMarkdown(tradeResult.orderResult.symbol)}\n`;
   }
-  
+
   message += `\n📝 *Lý do:* ${escapeMarkdown(tradeResult.reason)}\n`;
   message += `\n⏰ ${timestamp}`;
-  
+
   return message;
 }
 
@@ -999,7 +1002,7 @@ export async function sendAutoTradeNotification(tradeResult, token) {
 
   try {
     const message = formatAutoTradeMessage(tradeResult, token);
-    
+
     // Gửi vào topic trong group
     const success = await sendToTelegramChat(
       config.telegramGroupId,
@@ -1007,13 +1010,13 @@ export async function sendAutoTradeNotification(tradeResult, token) {
       config.telegramAutoTradeTopicId,
       false // Không silent mode cho auto trade notification
     );
-    
+
     if (success) {
       console.log(`✅ Đã gửi thông báo auto trade vào topic ${config.telegramAutoTradeTopicId} trong group: ${config.telegramGroupId}`);
     } else {
       console.error(`❌ Lỗi khi gửi thông báo auto trade vào topic ${config.telegramAutoTradeTopicId}`);
     }
-    
+
     return success;
   } catch (error) {
     console.error('❌ Lỗi khi gửi Auto Trade Telegram:', error.message);
@@ -1024,3 +1027,212 @@ export async function sendAutoTradeNotification(tradeResult, token) {
   }
 }
 
+/**
+ * Format thông báo check strategy
+ * @param {Object} logEntry - Dữ liệu log
+ * @returns {string} Message đã format
+ */
+function formatStrategyCheckingLogMessage(logEntry) {
+  const { timestamp, symbol, reason, ...extraData } = logEntry;
+
+  // Chuyển timestamp ISO sang format đọc được (VN)
+  const date = new Date(timestamp);
+  const formattedTime = date.toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
+  const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
+
+  let message = `🔍 *CHECK STRATEGY: $${cleanSymbolName}*\n\n`;
+  message += `📝 *Lý do:* ${escapeMarkdown(reason)}\n`;
+
+  // Thêm dữ liệu bổ sung nếu có
+  if (Object.keys(extraData).length > 0) {
+    message += `\n📊 *Dữ liệu bổ sung:*\n`;
+    for (const [key, value] of Object.entries(extraData)) {
+      const displayValue = typeof value === 'object' ? JSON.stringify(value) : value;
+      message += `• ${escapeMarkdown(key)}: \`${escapeMarkdown(displayValue.toString())}\`\n`;
+    }
+  }
+
+  message += `\n⏰ ${formattedTime}`;
+
+  return message;
+}
+
+/**
+ * Gửi log check strategy vào Telegram topic
+ * @param {Object} logEntry - Dữ liệu log { timestamp, symbol, reason, ...extraData }
+ * @returns {Promise<boolean>} true nếu gửi thành công
+ */
+export async function sendStrategyCheckingLog(logEntry) {
+  if (!config.telegramBotToken || !config.telegramGroupId || !config.telegramStrategyCheckingLogTopicId) {
+    return false;
+  }
+
+  try {
+    const message = formatStrategyCheckingLogMessage(logEntry);
+
+    // Gửi vào topic trong group (thường để ở chế độ silent để tránh quá nhiều thông báo)
+    const success = await sendToTelegramChat(
+      config.telegramGroupId,
+      message,
+      config.telegramStrategyCheckingLogTopicId,
+      true // Luôn silent cho strategy checking log
+    );
+
+    return success;
+  } catch (error) {
+    console.error('❌ Lỗi khi gửi Strategy Checking Log Telegram:', error.message);
+    return false;
+  }
+}
+
+/**
+ * Format thông báo Take Profit orders đã đặt / cập nhật
+ */
+function formatTakeProfitMessage(tpData) {
+  const { symbol, avgEntryPrice, pumpPercent, totalQty, levels = [], isUpdate } = tpData;
+  const timestamp = new Date().toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+
+  const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
+  const action = isUpdate ? '🔄 *CẬP NHẬT TP* \\(nhồi lệnh\\)' : '🎯 *ĐẶT TAKE PROFIT*';
+
+  let message = `${action}\n\n`;
+  message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+  message += `📍 *Avg Entry:* ${avgEntryPrice}\n`;
+  message += `📈 *Pump:* \\+${(pumpPercent * 100).toFixed(1)}%\n`;
+  message += `📦 *Tổng qty:* ${totalQty}\n\n`;
+  message += `📊 *Các mức Take Profit:*\n`;
+  levels.forEach(({ level, price, qty, profitPercent }) => {
+    message += `   TP${level}: @ ${price} \\| ${qty} qty \\| profit ~${profitPercent.toFixed(1)}%\n`;
+  });
+  message += `\n⏰ ${timestamp}`;
+  return message;
+}
+
+/**
+ * Gửi thông báo TP orders đã được đặt / cập nhật vào auto-trade topic
+ * @param {Object} tpData - { symbol, avgEntryPrice, pumpPercent, totalQty, levels, isUpdate }
+ * @returns {Promise<boolean>}
+ */
+export async function sendTakeProfitNotification(tpData) {
+  if (!config.telegramBotToken || !config.telegramGroupId || !config.telegramAutoTradeTopicId) {
+    return false;
+  }
+  try {
+    const message = formatTakeProfitMessage(tpData);
+    const success = await sendToTelegramChat(
+      config.telegramGroupId,
+      message,
+      config.telegramAutoTradeTopicId,
+      false
+    );
+    if (success) {
+      console.log(`✅ Đã gửi thông báo TP orders cho ${tpData.symbol}`);
+    }
+    return success;
+  } catch (error) {
+    console.error('❌ Lỗi khi gửi Telegram TP notification:', error.message);
+    return false;
+  }
+}
+
+/**
+ * Gửi thông báo khi SL đã được kéo về entry price (breakeven)
+ * @param {Object} data - { symbol, entryPrice, remainingQty, slOrderId }
+ * @returns {Promise<boolean>}
+ */
+export async function sendBreakevenSLNotification(data) {
+  if (!config.telegramBotToken || !config.telegramGroupId || !config.telegramAutoTradeTopicId) {
+    return false;
+  }
+  try {
+    const { symbol, entryPrice, remainingQty, slOrderId } = data;
+    const timestamp = new Date().toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+
+    const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
+    let message = `🛡️ *SL KÉO VỀ BREAKEVEN*\n\n`;
+    message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+    message += `✅ *TP1 đã khớp\\!* Kéo SL về entry price\n`;
+    message += `📍 *SL Price:* ${entryPrice} \\(entry\\)\n`;
+    message += `📦 *Qty còn lại:* ${remainingQty}\n`;
+    if (slOrderId) {
+      message += `🆔 *SL Order ID:* ${escapeMarkdown(String(slOrderId))}\n`;
+    }
+    message += `\n⏰ ${timestamp}`;
+
+    const success = await sendToTelegramChat(
+      config.telegramGroupId,
+      message,
+      config.telegramAutoTradeTopicId,
+      false
+    );
+    if (success) {
+      console.log(`✅ Đã gửi thông báo SL breakeven cho ${symbol}`);
+    }
+    return success;
+  } catch (error) {
+    console.error('❌ Lỗi khi gửi Telegram SL breakeven notification:', error.message);
+    return false;
+  }
+}
+
+/**
+ * Gửi thông báo khi một mức Take Profit (TP) đã được khớp
+ * @param {Object} data - { symbol, level, tpOrderId, price }
+ * @returns {Promise<boolean>}
+ */
+export async function sendTakeProfitFilledNotification(data) {
+  if (!config.telegramBotToken || !config.telegramGroupId || !config.telegramAutoTradeTopicId) {
+    return false;
+  }
+  try {
+    const { symbol, level, tpOrderId, price } = data;
+    const timestamp = new Date().toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+
+    const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
+    let message = `🎯 *TAKE PROFIT ${level} KHỚP*\n\n`;
+    message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+    message += `✅ *Chúc mừng:* TP${level} của mã này đã được chốt hoàn toàn\\!\n`;
+    if (price) {
+      message += `📍 *Giá khớp:* ${price}\n`;
+    }
+    if (tpOrderId) {
+      message += `🆔 *Order ID:* ${escapeMarkdown(String(tpOrderId))}\n`;
+    }
+    message += `\n⏰ ${timestamp}`;
+
+    const success = await sendToTelegramChat(
+      config.telegramGroupId,
+      message,
+      config.telegramAutoTradeTopicId,
+      false
+    );
+    if (success) {
+      console.log(`✅ Đã gửi thông báo TP${level} khớp cho ${symbol}`);
+    }
+    return success;
+  } catch (error) {
+    console.error(`❌ Lỗi khi gửi Telegram TP${data.level} filled notification:`, error.message);
+    return false;
+  }
+}

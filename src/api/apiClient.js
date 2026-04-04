@@ -27,16 +27,16 @@ export async function fetchKlineData(symbol, interval, limit = 200) {
     // Format: {MEXC_KLINE_API_BASE_URL}/{symbol}?interval={interval}&limit={limit}
     // Response format: { success: true, data: { time: [...], open: [...], close: [...], high: [...], low: [...], vol: [...], amount: [...] } }
     const url = `${config.mexcKlineApiBaseUrl}/${symbol}`;
-    
+
     // Chuyển đổi interval cho API (Hour1 -> Min60)
     const apiInterval = convertIntervalForAPI(interval);
-    
+
     // Tính toán start time: lấy limit candles từ hiện tại về trước
     // Mỗi interval có duration khác nhau (15m = 900s, 1h = 3600s, etc.)
     const now = Math.floor(Date.now() / 1000);
     const intervalSeconds = getIntervalSeconds(interval); // Vẫn dùng interval gốc để tính toán
     const startTime = now - (limit * intervalSeconds);
-    
+
     const response = await axios.get(url, {
       params: {
         interval: apiInterval, // Dùng apiInterval đã convert
@@ -58,7 +58,7 @@ export async function fetchKlineData(symbol, interval, limit = 200) {
     }
 
     const data = response.data.data;
-    
+
     // Kiểm tra xem có close array không
     if (!Array.isArray(data.close) || data.close.length === 0) {
       throw new Error(`Không có dữ liệu close price cho ${symbol}`);
@@ -97,7 +97,7 @@ function getIntervalSeconds(interval) {
     'Week1': 604800,
     'Month1': 2592000,
   };
-  
+
   return intervalMap[interval] || 86400; // Mặc định 15 phút nếu không tìm thấy
 }
 
@@ -139,6 +139,37 @@ export async function fetchTickerData() {
       // Lỗi khác
       throw new Error(`Error: ${error.message}`);
     }
+  }
+}
+
+/**
+ * Lấy lịch sử funding rate của một symbol từ MEXC
+ * @param {string} symbol - Symbol (ví dụ: 'BTC_USDT')
+ * @returns {Promise<Array>} Danh sách lịch sử funding rate
+ */
+export async function fetchFundingRateHistory(symbol) {
+  try {
+    const url = `https://futures.mexc.co/api/v1/contract/funding_rate/history`;
+    const response = await axios.get(url, {
+      params: {
+        symbol: symbol,
+        page_num: 1,
+        page_size: 10
+      },
+      timeout: 10000,
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.data || !response.data.success) {
+      throw new Error(`API response không hợp lệ cho ${symbol}`);
+    }
+
+    return response.data.data?.resultList || [];
+  } catch (error) {
+    console.error(`❌ Lỗi khi lấy lịch sử funding cho ${symbol}:`, error.message);
+    return [];
   }
 }
 
