@@ -421,3 +421,154 @@ export async function getSymbolTickSize(symbol) {
 }
 
 
+// =============================================================================
+// === INTERFACE-COMPATIBLE EXPORTS (theo exchangeInterface.js) ================
+// =============================================================================
+// Các hàm dưới đây là alias chuẩn hoá, để exchangeService.js có thể import
+// mà không phụ thuộc vào tên hàm riêng của từng sàn.
+
+/**
+ * Lấy số dư khả dụng USDT
+ * @param {string} [currency='USDT']
+ * @returns {Promise<number>}
+ */
+export async function getAccountBalance(currency = 'USDT') {
+  const balanceData = await getBingxAccountBalance(currency);
+  let balanceObj = balanceData;
+  if (balanceData?.balance && typeof balanceData.balance === 'object') {
+    balanceObj = balanceData.balance;
+  }
+  if (balanceObj && typeof balanceObj === 'object' && !Array.isArray(balanceObj)) {
+    const val = parseFloat(balanceObj.balance || balanceObj.availableMargin || balanceObj.availableBalance || '0');
+    if (!isNaN(val)) return val;
+  }
+  if (Array.isArray(balanceData) && balanceData.length > 0) {
+    const first = balanceData[0];
+    const firstObj = (first.balance && typeof first.balance === 'object') ? first.balance : first;
+    const val = parseFloat(firstObj.balance || firstObj.availableMargin || firstObj.availableBalance || '0');
+    if (!isNaN(val)) return val;
+  }
+  return 0;
+}
+
+/**
+ * Chuẩn hoá Position object về interface contract
+ * BingX: positionAmt → vol
+ */
+function normalizePosition(pos) {
+  if (!pos) return pos;
+  return {
+    ...pos,
+    vol: Math.abs(parseFloat(pos.positionAmt || pos.vol || '0')),
+    avgPrice: parseFloat(pos.avgPrice || pos.entryPrice || '0'),
+    positionValue: parseFloat(pos.positionValue || '0'),
+  };
+}
+
+/**
+ * Lấy danh sách vị thế đang mở — kết quả đã chuẩn hoá với `vol`
+ * @param {string} symbol
+ * @returns {Promise<Array>}
+ */
+export async function getOpenPositions(symbol) {
+  const positions = await getBingxOpenPositions(symbol);
+  if (Array.isArray(positions)) return positions.map(normalizePosition);
+  return [];
+}
+
+/**
+ * Đặt lệnh Market / Limit
+ * Input dùng `vol` thay cho `quantity`
+ * @param {Object} order
+ */
+export async function placeOrder(order = {}) {
+  const { vol, quantity, ...rest } = order;
+  const result = await placeBingxSwapOrder({ ...rest, quantity: vol ?? quantity });
+  return {
+    orderId: result?.order?.orderID || result?.order?.orderId || result?.orderId || result?.id,
+    symbol: order.symbol,
+    raw: result,
+  };
+}
+
+/**
+ * Hủy 1 lệnh
+ */
+export async function cancelOrder(symbol, orderId) {
+  return cancelBingxOrder(symbol, orderId);
+}
+
+/**
+ * Hủy tất cả lệnh đang chờ của symbol
+ */
+export async function cancelAllOrders(symbol) {
+  return cancelAllBingxOrders(symbol);
+}
+
+/**
+ * Lấy danh sách lệnh đang chờ khớp
+ */
+export async function getOpenOrders(symbol) {
+  const result = await getBingxOpenOrders(symbol);
+  return Array.isArray(result) ? result : (result?.orders || []);
+}
+
+/**
+ * Truy vấn trạng thái 1 lệnh — chuẩn hoá output thành { order: { orderId, status } }
+ */
+export async function getOrderStatus(symbol, orderId) {
+  const raw = await getBingxOrderStatus(symbol, orderId);
+  // BingX trả về dạng { order: { orderId, status } } → giữ nguyên
+  const status = raw?.order?.status || raw?.status;
+  return {
+    order: {
+      orderId: raw?.order?.orderId || raw?.order?.orderID || orderId,
+      status,
+    },
+    raw,
+  };
+}
+
+/**
+ * Lấy tick size của symbol
+ */
+export { getSymbolTickSize };
+
+/**
+ * Kiểm tra symbol có tồn tại trên sàn không
+ * @returns {Promise<{ exists: boolean, symbol: string, info: any }>}
+ */
+export async function checkContractSymbol(symbol) {
+  return checkBingxContractSymbol(symbol);
+}
+
+/**
+ * Đặt lệnh Stop Market (dùng để đặt Stop Loss)
+ * @param {Object} order
+ * @param {string} order.symbol
+ * @param {'BUY'|'SELL'} order.side
+ * @param {string|number} order.vol       - Số lượng token
+ * @param {string|number} order.stopPrice - Giá kích hoạt
+ * @param {'LONG'|'SHORT'} [order.positionSide]
+ */
+export async function placeStopOrder(order = {}) {
+  const { vol, stopPrice, ...rest } = order;
+  const result = await placeBingxSwapOrder({
+    ...rest,
+    type: 'STOP_MARKET',
+    quantity: vol,
+    stopPrice,
+  });
+  return {
+    orderId: result?.order?.orderID || result?.order?.orderId || result?.orderId || result?.id,
+    symbol: order.symbol,
+    raw: result,
+  };
+}
+
+/**
+ * Lấy lịch sử lệnh
+ */
+export async function getOrderHistory(symbol, limit = 50) {
+  return getBingxOrderHistory({ symbol, limit });
+}

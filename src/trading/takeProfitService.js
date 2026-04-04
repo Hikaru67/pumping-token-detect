@@ -1,10 +1,12 @@
 import {
-  placeBingxSwapOrder,
-  getBingxOpenPositions,
-  getBingxOpenOrders,
-  cancelAllBingxOrders,
+  placeOrder,
+  getOpenPositions,
+  getOpenOrders,
+  cancelAllOrders,
   getSymbolTickSize,
-} from '../api/bingxService.js';
+  getOrderStatus,
+  placeStopOrder,
+} from '../api/exchangeService.js';
 import { config } from '../config.js';
 import { getBaseSymbol } from '../utils/symbolUtils.js';
 import {
@@ -136,15 +138,15 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
       continue;
     }
     try {
-      const result = await placeBingxSwapOrder({
+      const result = await placeOrder({
         symbol: normalizedSymbol,
-        side: 'BUY',          // Đóng SHORT bằng BUY
+        side: 'BUY',
         type: 'LIMIT',
-        quantity: qty.toString(),
+        vol: qty.toString(),
         price: price.toString(),
         positionSide: 'SHORT',
       });
-      const orderId = result?.order?.orderID || result?.order?.orderId || result?.orderId || result?.id;
+      const orderId = result?.orderId;
       orderIds[keyMap[level]] = orderId;
       console.log(`   ✅ [${symbol}] Đặt TP${level} LIMIT BUY @ ${price} x ${qty} | orderId: ${orderId}`);
     } catch (err) {
@@ -204,7 +206,7 @@ export async function updateTakeProfitOrders(symbol, pumpPercent) {
 
   // 1. Cancel tất cả TP orders cũ của symbol
   try {
-    await cancelAllBingxOrders(normalizedSymbol);
+    await cancelAllOrders(normalizedSymbol);
     console.log(`   ✅ [${symbol}] Đã cancel tất cả lệnh cũ`);
   } catch (err) {
     console.warn(`   ⚠️  [${symbol}] Lỗi cancel orders cũ: ${err.message}`);
@@ -214,15 +216,14 @@ export async function updateTakeProfitOrders(symbol, pumpPercent) {
   let avgEntryPrice = null;
   let totalQty = null;
   try {
-    const positions = await getBingxOpenPositions(normalizedSymbol);
+    const positions = await getOpenPositions(normalizedSymbol);
     const shortPos = Array.isArray(positions)
       ? positions.find(p => p.symbol === normalizedSymbol && p.positionSide === 'SHORT')
       : null;
 
     if (shortPos) {
-      avgEntryPrice = parseFloat(shortPos.avgPrice || shortPos.entryPrice || '0');
-      // positionAmt là qty tuyệt đối (có thể âm cho SHORT)
-      totalQty = Math.abs(parseFloat(shortPos.positionAmt || shortPos.positionVolume || '0'));
+      avgEntryPrice = parseFloat(shortPos.avgPrice || '0');
+      totalQty = Math.abs(parseFloat(shortPos.vol || '0'));
       console.log(`   📊 [${symbol}] Avg entry price mới: ${avgEntryPrice}, totalQty: ${totalQty}`);
     }
   } catch (err) {
@@ -259,8 +260,7 @@ async function placeBreakevenStopLoss(baseSymbol, state) {
   console.log(`\n🛡️  [${baseSymbol}] Đặt Stop Loss tại entry price ${avgEntryPrice} (breakeven)...`);
 
   try {
-    // Lấy qty hiện tại của position để đặt SL cho đúng số lượng còn lại
-    const positions = await getBingxOpenPositions(symbol);
+    const positions = await getOpenPositions(symbol);
     const shortPos = Array.isArray(positions)
       ? positions.find(p => p.symbol === symbol && p.positionSide === 'SHORT')
       : null;
@@ -271,24 +271,23 @@ async function placeBreakevenStopLoss(baseSymbol, state) {
       return;
     }
 
-    const remainingQty = Math.abs(parseFloat(shortPos.positionAmt || shortPos.positionVolume || '0'));
+    const remainingQty = Math.abs(parseFloat(shortPos.vol || '0'));
     if (remainingQty <= 0) {
       console.log(`   ℹ️  [${baseSymbol}] Quantity = 0, position đã đóng hết`);
       tpStateMap.delete(baseSymbol);
       return;
     }
 
-    // Đặt STOP_MARKET để đóng SHORT khi giá quay lên entry (khoá lời)
-    const result = await placeBingxSwapOrder({
+    // Đặt Stop Loss để đóng SHORT khi giá quay lên entry (khoá lời)
+    const result = await placeStopOrder({
       symbol: symbol,
       side: 'BUY',
-      type: 'STOP_MARKET',
-      quantity: remainingQty.toString(),
+      vol: remainingQty.toString(),
       stopPrice: avgEntryPrice.toString(),
       positionSide: 'SHORT',
     });
 
-    const slOrderId = result?.orderId || result?.id;
+    const slOrderId = result?.orderId;
     state.slPlaced = true;
     state.slOrderId = slOrderId;
     console.log(`   ✅ [${baseSymbol}] Đặt SL breakeven @ ${avgEntryPrice} thành công | orderId: ${slOrderId}`);
@@ -330,7 +329,7 @@ export async function checkTPState() {
 
       // Lấy danh sách open orders 1 lần cho cả 3 mức TP để tiết kiệm API call
       try {
-        openOrders = await getBingxOpenOrders(symbol);
+        openOrders = await getOpenOrders(symbol);
         ordersArr = Array.isArray(openOrders) ? openOrders : (openOrders?.orders || []);
       } catch (err) {
         console.warn(`   ⚠️  [${baseSymbol}] Lỗi check open orders:`, err.message);
@@ -355,15 +354,14 @@ export async function checkTPState() {
             // Lệnh không còn trong mảng open orders -> Lấy status cụ thể bằng API
             let isActuallyFilled = false;
             try {
-              const { getBingxOrderStatus } = await import('../api/bingxService.js');
-              const orderInfo = await getBingxOrderStatus(symbol, tpOrderId);
-              const status = orderInfo?.order?.status || orderInfo?.status;
+              const orderInfo = await getOrderStatus(symbol, tpOrderId);
+              const status = orderInfo?.order?.status;
 
               if (status === 'FILLED') {
                 isActuallyFilled = true;
               } else if (status === 'CANCELED' || status === 'FAILED' || status === 'REJECTED') {
                 console.log(`   ℹ️  [${baseSymbol}] TP${level} (ID ${tpOrderId}) bị huỷ/từ chối (status=${status})`);
-                state[orderIdKey] = null; // Bỏ theo dõi TP này để khỏi check nữa
+                state[orderIdKey] = null;
               } else if (!status) {
                 console.warn(`   ⚠️  [${baseSymbol}] Không tìm thấy TP${level} status, đợi lấy lại...`);
               } else {
@@ -398,10 +396,10 @@ export async function checkTPState() {
 
       // Check xem liệu vị thế (position) có còn sống không
       // Phòng trừ bị SL cán sạch lệnh hoặc ngắt lệnh tay
-      const positions = await getBingxOpenPositions(symbol);
+      const positions = await getOpenPositions(symbol);
       const stillOpen = Array.isArray(positions)
         ? positions.some(p => p.symbol === symbol && p.positionSide === 'SHORT'
-          && Math.abs(parseFloat(p.positionAmt || '0')) > 0)
+          && Math.abs(parseFloat(p.vol || '0')) > 0)
         : false;
 
       // Nếu position đã huỷ hoàn toàn, hoặc tất cả TP đã khớp

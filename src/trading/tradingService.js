@@ -1,10 +1,12 @@
 import {
-  getBingxAccountBalance,
-  checkBingxContractSymbol,
-  placeBingxSwapOrder,
+  getAccountBalance as _exchangeGetAccountBalance,
+  getOpenPositions,
+  placeOrder,
+  checkContractSymbol,
+} from '../api/exchangeService.js';
+import {
   getBingxSwapTickers,
   callBingxPublicApi,
-  getBingxOpenPositions
 } from '../api/bingxService.js';
 import { config } from '../config.js';
 import { getBaseSymbol } from '../utils/symbolUtils.js';
@@ -18,16 +20,16 @@ import { fetchFundingRateHistory } from '../api/apiClient.js';
 export async function getOpenPositionVolume(symbol) {
   try {
     const normalizedSymbol = symbol.includes('-') ? symbol : `${symbol}-USDT`;
-    const positions = await getBingxOpenPositions(normalizedSymbol.toUpperCase());
+    const positions = await getOpenPositions(normalizedSymbol.toUpperCase());
 
     if (positions && Array.isArray(positions)) {
-      // Tìm vị thế SHORT cho symbol này
+      // Tìm vị thế SHORT cho symbol này (đã chuẩn hoá từ exchangeService)
       const shortPosition = positions.find(
         pos => pos.symbol === normalizedSymbol.toUpperCase() && pos.positionSide === 'SHORT'
       );
 
       if (shortPosition) {
-        // Trả về positionValue (giá trị USDT) thay vì positionAmt (số lượng token)
+        // positionValue đã được chuẩn hoá bởi exchange service
         return parseFloat(shortPosition.positionValue || '0');
       }
     }
@@ -112,29 +114,7 @@ export async function getBingxFundingRate(symbol) {
  */
 export async function getAccountBalance() {
   try {
-    const balanceData = await getBingxAccountBalance('USDT');
-
-    // BingX API trả về data có dạng { balance: { asset: "USDT", balance: "1000", availableMargin: "950" } }
-    let balanceObj = balanceData;
-    if (balanceData && balanceData.balance && typeof balanceData.balance === 'object') {
-      balanceObj = balanceData.balance;
-    }
-
-    if (balanceObj && typeof balanceObj === 'object' && !Array.isArray(balanceObj)) {
-      const balance = parseFloat(balanceObj.balance || balanceObj.availableMargin || balanceObj.availableBalance || '0');
-      if (!isNaN(balance)) return balance;
-    }
-
-    // Nếu là array, lấy phần tử đầu tiên
-    if (Array.isArray(balanceData) && balanceData.length > 0) {
-      const first = balanceData[0];
-      const firstObj = (first.balance && typeof first.balance === 'object') ? first.balance : first;
-      const balance = parseFloat(firstObj.balance || firstObj.availableMargin || firstObj.availableBalance || '0');
-      if (!isNaN(balance)) return balance;
-    }
-
-    console.warn('⚠️  Không tìm thấy balance data hợp lệ');
-    return 0;
+    return await _exchangeGetAccountBalance('USDT');
   } catch (error) {
     console.error('❌ Lỗi khi lấy account balance:', error.message);
     return 0;
@@ -166,7 +146,7 @@ export function calculateEntryVolume(accountBalance, volumePercent, leverage = 2
 export async function checkSymbolExists(symbol) {
   try {
     const baseSymbol = getBaseSymbol(symbol);
-    const result = await checkBingxContractSymbol(baseSymbol);
+    const result = await checkContractSymbol(baseSymbol);
     return result.exists;
   } catch (error) {
     console.warn(`⚠️  Lỗi khi kiểm tra symbol ${symbol}:`, error.message);
@@ -199,30 +179,26 @@ export function checkPumpPercentage(token, pumpThreshold) {
  */
 export async function placeShortOrder(symbol, quantity, leverage = 2) {
   try {
-    // Normalize symbol
     const normalizedSymbol = symbol.includes('-') ? symbol : `${symbol}-USDT`;
-
-    // Đặt lệnh SHORT (SELL) với đòn bẩy
-    const orderPayload = {
-      symbol: normalizedSymbol.toUpperCase(),
-      side: 'SELL', // SHORT position
-      type: 'MARKET', // Market order
-      quantity: quantity.toString(),
-      leverage: leverage,
-      marginMode: 'CROSSED', // Cross margin
-      positionSide: 'SHORT', // SHORT position
-    };
 
     console.log(`📤 Đang đặt lệnh SHORT: ${normalizedSymbol}, Quantity (Tokens): ${quantity}, Leverage: ${leverage}x`);
 
-    const result = await placeBingxSwapOrder(orderPayload);
+    const result = await placeOrder({
+      symbol: normalizedSymbol.toUpperCase(),
+      side: 'SELL',
+      type: 'MARKET',
+      vol: quantity.toString(),
+      leverage,
+      marginMode: 'CROSSED',
+      positionSide: 'SHORT',
+    });
 
     console.log(`✅ Đã đặt lệnh SHORT thành công:`, result);
     return {
       success: true,
-      orderId: result.orderId || result.id,
+      orderId: result.orderId,
       symbol: normalizedSymbol,
-      volume: quantity, // Vẫn trả về field volume để tương thích logic log cũ bên trigger
+      volume: quantity,
       leverage,
       result,
     };
