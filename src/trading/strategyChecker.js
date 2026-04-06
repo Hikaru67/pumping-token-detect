@@ -53,10 +53,10 @@ function isOverbought80(rsiData, timeframe) {
  */
 async function checkReversalSignalCached(token, timeframes) {
   if (!token._reversalCache) token._reversalCache = {};
-  
+
   const tfToFetch = [];
   const cachedResult = { hasSignal: false, timeframes: [] };
-  
+
   for (const tf of timeframes) {
     if (token._reversalCache[tf] !== undefined) {
       if (token._reversalCache[tf]) {
@@ -67,7 +67,7 @@ async function checkReversalSignalCached(token, timeframes) {
       tfToFetch.push(tf);
     }
   }
-  
+
   if (tfToFetch.length > 0) {
     const fetchResult = await checkReversalSignal(token, tfToFetch);
     for (const tf of tfToFetch) {
@@ -80,7 +80,7 @@ async function checkReversalSignalCached(token, timeframes) {
       }
     }
   }
-  
+
   return cachedResult;
 }
 
@@ -190,7 +190,64 @@ export async function checkStrategy2(token) {
 }
 
 /**
- * Chiến thuật 3: Khi đạt super overbought ở khung 30m, 1h, 4h, 8h nhưng các khung bé 5m, 15m vẫn chưa đạt 80+
+ * Chiến thuật 6: Tương tự Chiến thuật 2 nhưng thêm 1 khung super overbought là 8h (H8 >= 90)
+ * và thay điều kiện H8 >= 80 thành D1 >= 80
+ * Cũng vào 10% tài khoản và KHÔNG cần điều kiện nến đảo chiều
+ * @param {Object} token - Token object có RSI data
+ * @returns {Promise<Object>} { matched: boolean, reason: string, superOverboughtCount: number }
+ */
+export async function checkStrategy6(token) {
+  if (!token || !token.rsi || typeof token.rsi !== 'object') {
+    return { matched: false, reason: 'Token không có RSI data' };
+  }
+
+  const rsiCond = checkStrategy1RSIConditions(token.rsi);
+
+  if (!rsiCond.matched) {
+    return {
+      matched: false,
+      reason: `Chiến thuật 1 chưa thỏa mãn: ${rsiCond.reason}`,
+    };
+  }
+
+  // Đếm số lượng RSI super overbought
+  const superOverboughtCount = countSuperOverboughtRSI(token.rsi);
+
+  // Cần ít nhất 5 RSI super overbought (3 khung M5, M15, M30 từ S1 + có thể thêm khung khác + bắt buộc H8)
+  // Thực tế bài toán yêu cầu đảm bảo >= 4 khung SO giống C2 nhưng yêu cầu thêm H8 là SO.
+  if (superOverboughtCount < 4) {
+    return {
+      matched: false,
+      reason: `Số lượng RSI super overbought (${superOverboughtCount}) < 4`,
+      superOverboughtCount,
+    };
+  }
+
+  // Thêm điều kiện: RSI H8 >= 90 (super overbought)
+  if (!isSuperOverbought(token.rsi, 'Hour8')) {
+    return {
+      matched: false,
+      reason: 'RSI H8 chưa đạt super overbought (90+)',
+    };
+  }
+
+  // ĐK mới: RSI D1 >= 80
+  if (!isOverbought80(token.rsi, 'Day1')) {
+    return {
+      matched: false,
+      reason: 'RSI Day1 chưa đạt 80+',
+    };
+  }
+
+  return {
+    matched: true,
+    reason: `Chiến thuật 6: S1 thỏa mãn + H8 >= 90 + D1 >= 80 + ${superOverboughtCount} RSI >= 90`,
+    superOverboughtCount,
+  };
+}
+
+/**
+ * Chiến thuật 3: Khi đạt super overbought ở 3/4 khung 30m, 1h, 4h, 8h nhưng các khung bé 5m, 15m vẫn chưa đạt 80+
  * Chỉ vào 1% tài khoản khi có nến đảo chiều khung 5m, 15m
  * @param {Object} token - Token object có RSI data
  * @returns {Promise<Object>} { matched: boolean, reason: string, reversalTimeframes: Array<string> }
@@ -206,7 +263,7 @@ export async function checkStrategy3(token) {
   const largeTimeframes = ['Min30', 'Hour1', 'Hour4', 'Hour8'];
   const superOverboughtLarge = largeTimeframes.filter(tf => isSuperOverbought(rsiData, tf));
 
-  if (superOverboughtLarge.length === 0) {
+  if (superOverboughtLarge.length < 3) {
     return {
       matched: false,
       reason: 'Chưa có RSI super overbought ở khung lớn (30m, 1h, 4h, 8h)',
@@ -353,7 +410,7 @@ export async function checkStrategy5(token) {
  */
 export async function checkAllStrategies(token) {
   // Kiểm tra ưu tiên các chiến thuật không cần chờ nến đảo chiều trước:
-  // Thứ tự: Strategy 4 > Strategy 2 > Strategy 5 > Strategy 1 > Strategy 3
+  // Thứ tự: Strategy 4 > Strategy 6 > Strategy 2 > Strategy 5 > Strategy 1 > Strategy 3
 
   // Check Strategy 4 (Không cần nến đảo chiều)
   const strategy4Result = await checkStrategy4(token);
@@ -365,6 +422,19 @@ export async function checkAllStrategies(token) {
       strategy: 4,
       result: strategy4Result,
       volumePercent: config.tradingStrategy4VolumePercent || 30, // 30% tài khoản mặc định
+    };
+  }
+
+  // Check Strategy 6 (Không cần nến đảo chiều)
+  const strategy6Result = await checkStrategy6(token);
+  if (strategy6Result.matched) {
+    await appendSignalLog(
+      `[${token.symbol || 'UNKNOWN'}] Chiến thuật 6 THỎA MÃN: ${strategy6Result.reason}`
+    );
+    return {
+      strategy: 6,
+      result: strategy6Result,
+      volumePercent: config.tradingStrategy6VolumePercent || 10, // 10% tài khoản, giống C2
     };
   }
 

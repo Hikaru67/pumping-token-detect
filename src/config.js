@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ override: true });
 
 export const config = {
   // MEXC API
@@ -141,6 +141,7 @@ export const config = {
   tradingStrategy2VolumePercent: parseFloat(process.env.TRADING_STRATEGY2_VOLUME_PERCENT || '10', 10), // 10% tài khoản
   tradingStrategy3VolumePercent: parseFloat(process.env.TRADING_STRATEGY3_VOLUME_PERCENT || '1', 10), // 1% tài khoản
   tradingStrategy5VolumePercent: parseFloat(process.env.TRADING_STRATEGY5_VOLUME_PERCENT || '15', 10), // 15% tài khoản
+  tradingStrategy6VolumePercent: parseFloat(process.env.TRADING_STRATEGY6_VOLUME_PERCENT || '10', 10), // 10% tài khoản
 
   // Take Profit Configuration
   tpEnabled: process.env.TP_ENABLED === 'true', // Bật/tắt take profit tự động

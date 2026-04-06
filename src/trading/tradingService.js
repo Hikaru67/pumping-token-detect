@@ -133,8 +133,8 @@ export function calculateEntryVolume(accountBalance, volumePercent, leverage = 2
     return 0;
   }
 
-  // Volume = (accountBalance * volumePercent / 100) * leverage
-  const volume = (accountBalance * volumePercent / 100) * leverage;
+  // Volume = (accountBalance * volumePercent / 100)
+  const volume = (accountBalance * volumePercent / 100);
   return parseFloat(volume.toFixed(8));
 }
 

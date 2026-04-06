@@ -1106,16 +1106,16 @@ function formatTakeProfitMessage(tpData) {
   });
 
   const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
-  const action = isUpdate ? '🔄 *CẬP NHẬT TP* \\(nhồi lệnh\\)' : '🎯 *ĐẶT TAKE PROFIT*';
+  const action = isUpdate ? '🔄 *CẬP NHẬT TP* (nhồi lệnh)' : '🎯 *ĐẶT TAKE PROFIT*';
 
   let message = `${action}\n\n`;
   message += `💰 *Symbol:* $${cleanSymbolName}\n`;
   message += `📍 *Avg Entry:* ${avgEntryPrice}\n`;
-  message += `📈 *Pump:* \\+${(pumpPercent * 100).toFixed(1)}%\n`;
+  message += `📈 *Pump:* +${(pumpPercent * 100).toFixed(1)}%\n`;
   message += `📦 *Tổng qty:* ${totalQty}\n\n`;
   message += `📊 *Các mức Take Profit:*\n`;
   levels.forEach(({ level, price, qty, profitPercent }) => {
-    message += `   TP${level}: @ ${price} \\| ${qty} qty \\| profit ~${profitPercent.toFixed(1)}%\n`;
+    message += `   TP${level}: @ ${price} | ${qty} qty | profit ~${profitPercent.toFixed(1)}%\n`;
   });
   message += `\n⏰ ${timestamp}`;
   return message;
@@ -1168,8 +1168,8 @@ export async function sendBreakevenSLNotification(data) {
     const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
     let message = `🛡️ *SL KÉO VỀ BREAKEVEN*\n\n`;
     message += `💰 *Symbol:* $${cleanSymbolName}\n`;
-    message += `✅ *TP1 đã khớp\\!* Kéo SL về entry price\n`;
-    message += `📍 *SL Price:* ${entryPrice} \\(entry\\)\n`;
+    message += `✅ *TP1 đã khớp!* Kéo SL về entry price\n`;
+    message += `📍 *SL Price:* ${entryPrice} (entry)\n`;
     message += `📦 *Qty còn lại:* ${remainingQty}\n`;
     if (slOrderId) {
       message += `🆔 *SL Order ID:* ${escapeMarkdown(String(slOrderId))}\n`;
@@ -1212,7 +1212,7 @@ export async function sendTakeProfitFilledNotification(data) {
     const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
     let message = `🎯 *TAKE PROFIT ${level} KHỚP*\n\n`;
     message += `💰 *Symbol:* $${cleanSymbolName}\n`;
-    message += `✅ *Chúc mừng:* TP${level} của mã này đã được chốt hoàn toàn\\!\n`;
+    message += `✅ *Chúc mừng:* TP${level} của mã này đã được chốt hoàn toàn!\n`;
     if (price) {
       message += `📍 *Giá khớp:* ${price}\n`;
     }
