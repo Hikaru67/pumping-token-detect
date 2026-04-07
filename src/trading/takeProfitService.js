@@ -36,11 +36,38 @@ import {
  *   slOrderId,      // Order ID SL
  * }
  */
-const tpStateMap = new Map();
+import { saveStateToFile, loadStateFromFile } from '../utils/stateManager.js';
+
+let tpStateMap = new Map();
 
 // Expose state map for testing
 export function getTpStateMap() {
   return tpStateMap;
+}
+
+/**
+ * Lưu trạng thái TP xuống JSON backup
+ */
+export async function saveTPState() {
+  // state._isUpdate không cần thiết lưu file
+  const dataToSave = Array.from(tpStateMap.entries());
+  await saveStateToFile('tp_state_backup.json', dataToSave);
+}
+
+/**
+ * Khôi phục trạng thái TP từ JSON backup
+ * Gọi 1 lần duy nhất lúc khởi động bot
+ */
+export async function initTPStateRecovery() {
+  try {
+    const data = await loadStateFromFile('tp_state_backup.json');
+    if (data && Array.isArray(data)) {
+      tpStateMap = new Map(data);
+      console.log(`\n✅ [TP Service] Đã khôi phục ${tpStateMap.size} trạng thái Take Profit từ backup.`);
+    }
+  } catch (err) {
+    console.warn(`\n⚠️  [TP Service] Không khôi phục được TP state, bắt đầu với state rỗng.`, err.message);
+  }
 }
 
 /**
@@ -170,6 +197,7 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
     slPlaced: false,
     slOrderId: null,
   });
+  saveTPState(); // Cập nhật state file
 
   // Gửi Telegram
   sendTakeProfitNotification({
@@ -233,6 +261,7 @@ export async function updateTakeProfitOrders(symbol, pumpPercent) {
   if (!avgEntryPrice || avgEntryPrice <= 0 || !totalQty || totalQty <= 0) {
     console.warn(`   ⚠️  [${symbol}] Không có position hợp lệ, bỏ qua update TP`);
     tpStateMap.delete(baseSymbol);
+    saveTPState();
     return;
   }
 
@@ -268,6 +297,7 @@ async function placeBreakevenStopLoss(baseSymbol, state) {
     if (!shortPos) {
       console.log(`   ℹ️  [${baseSymbol}] Không còn position, bỏ qua đặt SL`);
       tpStateMap.delete(baseSymbol);
+      saveTPState();
       return;
     }
 
@@ -275,6 +305,7 @@ async function placeBreakevenStopLoss(baseSymbol, state) {
     if (remainingQty <= 0) {
       console.log(`   ℹ️  [${baseSymbol}] Quantity = 0, position đã đóng hết`);
       tpStateMap.delete(baseSymbol);
+      saveTPState();
       return;
     }
 
@@ -291,6 +322,7 @@ async function placeBreakevenStopLoss(baseSymbol, state) {
     state.slPlaced = true;
     state.slOrderId = slOrderId;
     console.log(`   ✅ [${baseSymbol}] Đặt SL breakeven @ ${avgEntryPrice} thành công | orderId: ${slOrderId}`);
+    saveTPState();
 
     // Gửi Telegram notification
     sendBreakevenSLNotification({
@@ -311,6 +343,8 @@ async function placeBreakevenStopLoss(baseSymbol, state) {
  */
 export async function checkTPState() {
   if (tpStateMap.size === 0) return;
+
+  let stateChanged = false;
 
   console.log(`\n🕐 [TP Monitor] Đang check ${tpStateMap.size} position(s)...`);
 
@@ -362,6 +396,7 @@ export async function checkTPState() {
               } else if (status === 'CANCELED' || status === 'FAILED' || status === 'REJECTED') {
                 console.log(`   ℹ️  [${baseSymbol}] TP${level} (ID ${tpOrderId}) bị huỷ/từ chối (status=${status})`);
                 state[orderIdKey] = null;
+                stateChanged = true;
               } else if (!status) {
                 console.warn(`   ⚠️  [${baseSymbol}] Không tìm thấy TP${level} status, đợi lấy lại...`);
               } else {
@@ -374,6 +409,7 @@ export async function checkTPState() {
             if (isActuallyFilled) {
               console.log(`   ✅ [${baseSymbol}] Lệnh TP${level} đã khớp hoàn toàn (FILLED)!`);
               state[filledKey] = true;
+              stateChanged = true;
 
               // Gửi báo cáo TP khớp qua vi-VN Telegram
               sendTakeProfitFilledNotification({
@@ -389,7 +425,7 @@ export async function checkTPState() {
               }
             }
           } else {
-             console.log(`   ⏳ [${baseSymbol}] TP${level} chưa khớp (còn trong open orders)`);
+            console.log(`   ⏳ [${baseSymbol}] TP${level} chưa khớp (còn trong open orders)`);
           }
         }
       }
@@ -408,11 +444,16 @@ export async function checkTPState() {
       if (!stillOpen || allTpFilled) {
         console.log(`   ℹ️  [${baseSymbol}] Position đã đóng hoàn toàn hoặc All TPs Filled, cleanup TP state`);
         tpStateMap.delete(baseSymbol);
+        stateChanged = true;
       }
 
     } catch (err) {
       console.warn(`   ⚠️  [${baseSymbol}] Lỗi trong TP monitor:`, err.message);
     }
+  }
+
+  if (stateChanged) {
+    saveTPState();
   }
 }
 
@@ -431,4 +472,5 @@ export function getTPState(symbol) {
  */
 export function clearTPState(symbol) {
   tpStateMap.delete(getBaseSymbol(symbol));
+  saveTPState();
 }

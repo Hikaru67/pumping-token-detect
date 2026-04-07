@@ -404,13 +404,63 @@ export async function checkStrategy5(token) {
 }
 
 /**
+ * Chiến thuật 7 (Mini Blow-off / Macro+Micro 85):
+ * Chỉ cần khung M15 >= 85 và D1 >= 85, CÓ nến đảo chiều khung M5
+ * KHÔNG cần khung M5 đạt RSI ngưỡng nào, chỉ cần nến đảo chiều M5
+ * Vào lệnh 3% tài khoản
+ * @param {Object} token - Token object có RSI data
+ * @returns {Promise<Object>} { matched: boolean, reason: string, reversalTimeframes: Array<string> }
+ */
+export async function checkStrategy7(token) {
+  if (!token || !token.rsi || typeof token.rsi !== 'object') {
+    return { matched: false, reason: 'Token không có RSI data' };
+  }
+
+  const rsiData = token.rsi;
+
+  // Kiểm tra RSI M15 >= 85
+  const rsiM15 = rsiData['Min15'];
+  if (rsiM15 === null || isNaN(rsiM15) || rsiM15 < 85) {
+    return {
+      matched: false,
+      reason: `RSI M15 chưa đạt >= 85 (hiện tại: ${rsiM15 ?? 'N/A'})`,
+    };
+  }
+
+  // Kiểm tra RSI D1 >= 85
+  const rsiD1 = rsiData['Day1'];
+  if (rsiD1 === null || isNaN(rsiD1) || rsiD1 < 85) {
+    return {
+      matched: false,
+      reason: `RSI D1 chưa đạt >= 85 (hiện tại: ${rsiD1 ?? 'N/A'})`,
+    };
+  }
+
+  // Kiểm tra nến đảo chiều ở khung 5m (sử dụng cache)
+  const reversalResult = await checkReversalSignalCached(token, ['Min5']);
+
+  if (!reversalResult.hasSignal || !reversalResult.timeframes.includes('Min5')) {
+    return {
+      matched: false,
+      reason: 'Chưa có nến đảo chiều ở khung 5m',
+    };
+  }
+
+  return {
+    matched: true,
+    reason: `Chiến thuật 7 (Mini Blow-off): M15 >= 85 (${rsiM15.toFixed(2)}), D1 >= 85 (${rsiD1.toFixed(2)}), có nến đảo chiều M5`,
+    reversalTimeframes: reversalResult.timeframes,
+  };
+}
+
+/**
  * Kiểm tra tất cả các chiến thuật và trả về chiến thuật phù hợp nhất
  * @param {Object} token - Token object có RSI data
  * @returns {Promise<Object>} { strategy: number|null, result: Object, volumePercent: number }
  */
 export async function checkAllStrategies(token) {
   // Kiểm tra ưu tiên các chiến thuật không cần chờ nến đảo chiều trước:
-  // Thứ tự: Strategy 4 > Strategy 6 > Strategy 2 > Strategy 5 > Strategy 1 > Strategy 3
+  // Thứ tự: Strategy 4 > Strategy 6 > Strategy 2 > Strategy 5 > Strategy 7 > Strategy 1 > Strategy 3
 
   // Check Strategy 4 (Không cần nến đảo chiều)
   const strategy4Result = await checkStrategy4(token);
@@ -461,6 +511,19 @@ export async function checkAllStrategies(token) {
       strategy: 5,
       result: strategy5Result,
       volumePercent: config.tradingStrategy5VolumePercent || 15, // 15% tài khoản mặc định
+    };
+  }
+
+  // Check Strategy 7
+  const strategy7Result = await checkStrategy7(token);
+  if (strategy7Result.matched) {
+    await appendSignalLog(
+      `[${token.symbol || 'UNKNOWN'}] Chiến thuật 7 THỎA MÃN: ${strategy7Result.reason}`
+    );
+    return {
+      strategy: 7,
+      result: strategy7Result,
+      volumePercent: config.tradingStrategy7VolumePercent || 3, // 3% tài khoản
     };
   }
 

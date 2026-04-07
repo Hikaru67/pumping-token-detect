@@ -11,10 +11,34 @@ import { countSuperOverboughtRSI } from '../utils/dataProcessor.js';
 import { getBaseSymbol } from '../utils/symbolUtils.js';
 import { sendAutoTradeNotification } from '../telegram/telegramBot.js';
 import { logTradeHistory } from './tradeLogger.js';
+import { saveStateToFile, loadStateFromFile } from '../utils/stateManager.js';
 import { placeTakeProfitOrders, updateTakeProfitOrders, getTPState } from './takeProfitService.js';
 
 // Lưu trữ các lệnh đã vào để tránh vào lệnh trùng lặp
-const executedOrders = new Map(); // key: symbol, value: { timestamp, strategy, volume }
+let executedOrders = new Map(); // key: symbol, value: { timestamp, strategy, volume }
+
+/**
+ * Khôi phục state của executedOrders từ JSON backup
+ */
+export async function loadExecutedOrdersState() {
+  try {
+    const data = await loadStateFromFile('executed_orders_backup.json');
+    if (data && Array.isArray(data)) {
+      executedOrders = new Map(data);
+      console.log(`✅ [TradingTrigger] Đã khôi phục ${executedOrders.size} trạng thái đơn hàng (executed orders) từ backup`);
+    }
+  } catch (err) {
+    console.warn(`⚠️  [TradingTrigger] Không thể khôi phục executed_orders backup:`, err.message);
+  }
+}
+
+/**
+ * Lưu trạng thái executedOrders xuống JSON backup
+ */
+async function saveExecutedOrdersState() {
+  const dataToSave = Array.from(executedOrders.entries());
+  await saveStateToFile('executed_orders_backup.json', dataToSave);
+}
 
 /**
  * Kiểm tra xem đã vào lệnh cho symbol này chưa (trong vòng 1 giờ cho cùng 1 chiến thuật)
@@ -36,6 +60,7 @@ function hasRecentOrder(symbol, strategy) {
   if (order.timestamp < oneHourAgo) {
     // Xóa lệnh cũ
     executedOrders.delete(baseSymbol);
+    saveExecutedOrdersState(); // Cập nhật state file
     return false;
   }
 
@@ -61,6 +86,7 @@ function saveExecutedOrder(symbol, strategy, volume) {
     strategy,
     volume,
   });
+  saveExecutedOrdersState(); // Cập nhật state file
 }
 
 /**

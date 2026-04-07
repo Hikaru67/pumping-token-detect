@@ -40,7 +40,7 @@ async function callMexcPrivateApi(endpoint, method = 'GET', data = {}) {
   };
 
   const url = `${BASE_URL}${endpoint}`;
-  
+
   try {
     const response = await axios({
       method: method,
@@ -50,7 +50,7 @@ async function callMexcPrivateApi(endpoint, method = 'GET', data = {}) {
     });
 
     if (response.data && response.data.success !== undefined && !response.data.success) {
-        throw new Error(`MEXC API Error (${response.data.code}): ${response.data.message || JSON.stringify(response.data)}`);
+      throw new Error(`MEXC API Error (${response.data.code}): ${response.data.message || JSON.stringify(response.data)}`);
     }
 
     return response.data;
@@ -102,12 +102,12 @@ export async function setMexcLeverage(symbol, leverage, positionType = 1) {
 
 /** Đặt lệnh Market / Limit (raw MEXC format) */
 export async function placeMexcOrder(data = {}) {
-  return await callMexcPrivateApi('/api/v1/private/order/submit', 'POST', data);
+  return await callMexcPrivateApi('/api/v1/private/order/create', 'POST', data);
 }
 
 /** Đặt lệnh Trigger (Stop Loss) — MEXC dùng endpoint riêng */
 export async function placeMexcPlanOrder(data = {}) {
-  return await callMexcPrivateApi('/api/v1/private/planorder/place', 'POST', data);
+  return await callMexcPrivateApi('/api/v1/private/planorder/place/v2', 'POST', data);
 }
 
 /** Lấy lịch sử lệnh */
@@ -213,7 +213,7 @@ export async function cancelAllOrders(symbol) {
  */
 export async function getOpenOrders(symbol) {
   const params = symbol ? `?symbol=${symbol}` : '';
-  const response = await callMexcPrivateApi(`/api/v1/private/order/open_orders${params}`, 'GET');
+  const response = await callMexcPrivateApi(`/api/v1/private/order/list/open_orders${params}`, 'GET');
   return response.data || [];
 }
 

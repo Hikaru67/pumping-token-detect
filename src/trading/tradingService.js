@@ -128,13 +128,13 @@ export async function getAccountBalance() {
  * @param {number} leverage - Đòn bẩy (mặc định: 2)
  * @returns {number} Volume vào lệnh (sau khi nhân đòn bẩy)
  */
-export function calculateEntryVolume(accountBalance, volumePercent, leverage = 2) {
+export function calculateEntryVolume(accountBalance, volumePercent, leverage = 1) {
   if (!accountBalance || accountBalance <= 0) {
     return 0;
   }
 
   // Volume = (accountBalance * volumePercent / 100)
-  const volume = (accountBalance * volumePercent / 100);
+  const volume = (accountBalance * volumePercent / 100) * leverage;
   return parseFloat(volume.toFixed(8));
 }
 

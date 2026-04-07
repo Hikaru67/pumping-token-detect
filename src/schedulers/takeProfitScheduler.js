@@ -1,4 +1,5 @@
-import { checkTPState } from '../trading/takeProfitService.js';
+import { checkTPState, initTPStateRecovery } from '../trading/takeProfitService.js';
+import { loadExecutedOrdersState } from '../trading/tradingTrigger.js';
 import { config } from '../config.js';
 
 let tpMonitorTimer = null;
@@ -8,11 +9,15 @@ let isChecking = false;
  * Khởi động TP monitor scheduler
  * Chạy checkTPState() mỗi tpMonitorIntervalMs để phát hiện TP1 fill và đặt SL breakeven
  */
-export function startTakeProfitScheduler() {
+export async function startTakeProfitScheduler() {
   if (!config.tpEnabled) {
     console.log('ℹ️  Take Profit scheduler đã tắt (TP_ENABLED=false)');
     return;
   }
+
+  // Khôi phục các state từ file JSON backup (TP orders & Executed orders cooldown)
+  await initTPStateRecovery();
+  await loadExecutedOrdersState();
 
   const interval = config.tpMonitorIntervalMs || 60000;
   console.log(`🚀 Khởi động Take Profit Monitor (interval: ${interval / 1000}s)`);
