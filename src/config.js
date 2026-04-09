@@ -3,6 +3,9 @@ import dotenv from 'dotenv';
 dotenv.config({ override: true });
 
 export const config = {
+  // Exchange Provider
+  exchangeProvider: (process.env.EXCHANGE_PROVIDER || 'bingx').toLowerCase().trim(),
+
   // MEXC API
   mexcApiUrl: process.env.MEXC_API_URL || 'https://futures.mexc.co/api/v1/contract/ticker',
   mexcKlineApiBaseUrl: process.env.MEXC_KLINE_API_BASE_URL || 'https://contract.mexc.co/api/v1/contract/kline',

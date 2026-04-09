@@ -3,6 +3,20 @@ import crypto from 'crypto';
 import { config } from '../config.js';
 
 /**
+ * Cung cấp hàm chuẩn hóa cho MEXC
+ */
+function toMexcSymbol(symbol) {
+  if (!symbol) return symbol;
+  let normalized = symbol.toUpperCase().trim();
+  if (normalized.includes('-')) {
+    normalized = normalized.replace('-', '_');
+  } else if (!normalized.includes('_')) {
+    normalized = `${normalized}_USDT`;
+  }
+  return normalized;
+}
+
+/**
  * MEXC Futures API Client
  * Document: https://mexcdevelop.github.io/apidocs/contract_v1_en/
  */
@@ -79,7 +93,9 @@ export async function getMexcAccountBalance(currency = 'USDT') {
 
 /** Lấy thông tin chi tiết Symbol (tick size, min lot, v.v.) */
 export async function getMexcSymbolInfo(symbol) {
-  const response = await axios.get(`${BASE_URL}/api/v1/contract/detail`, { params: { symbol } });
+  const normalizedSymbol = toMexcSymbol(symbol);
+  
+  const response = await axios.get(`${BASE_URL}/api/v1/contract/detail`, { params: { symbol: normalizedSymbol } });
   if (response.data && response.data.success && response.data.data) {
     return response.data.data;
   }
@@ -172,7 +188,8 @@ export async function getAccountBalance(currency = 'USDT') {
  * Lấy danh sách vị thế đang mở — kết quả đã chuẩn hoá với `vol`
  */
 export async function getOpenPositions(symbol = '') {
-  const params = symbol ? `?symbol=${symbol}` : '';
+  const normSymbol = toMexcSymbol(symbol);
+  const params = normSymbol ? `?symbol=${normSymbol}` : '';
   const response = await callMexcPrivateApi(`/api/v1/private/position/open_positions${params}`, 'GET');
   const data = response.data || [];
   return Array.isArray(data) ? data.map(normalizeMexcPosition) : [];
@@ -185,11 +202,12 @@ export async function getOpenPositions(symbol = '') {
  */
 export async function placeOrder(order = {}) {
   const { vol, price, symbol, side, type = 5, openType = 2, leverage } = order;
-  const mexcPayload = { symbol, price, vol, side, type, openType, leverage };
+  const normSymbol = toMexcSymbol(symbol);
+  const mexcPayload = { symbol: normSymbol, price, vol, side, type, openType, leverage };
   const result = await placeMexcOrder(mexcPayload);
   return {
     orderId: result?.data,
-    symbol,
+    symbol: normSymbol,
     raw: result,
   };
 }
@@ -198,6 +216,7 @@ export async function placeOrder(order = {}) {
  * Hủy 1 lệnh — MEXC nhận list orderId
  */
 export async function cancelOrder(symbol, orderId) {
+  // MEXC endpoint này dường như không yêu cầu symbol, nhưng nếu có thể, vẫn truyền list
   return await callMexcPrivateApi('/api/v1/private/order/cancel', 'POST', [orderId]);
 }
 
@@ -205,14 +224,15 @@ export async function cancelOrder(symbol, orderId) {
  * Hủy tất cả lệnh đang chờ của symbol
  */
 export async function cancelAllOrders(symbol) {
-  return await callMexcPrivateApi('/api/v1/private/order/cancel_all', 'POST', { symbol });
+  return await callMexcPrivateApi('/api/v1/private/order/cancel_all', 'POST', { symbol: toMexcSymbol(symbol) });
 }
 
 /**
  * Lấy danh sách lệnh đang chờ khớp
  */
 export async function getOpenOrders(symbol) {
-  const params = symbol ? `?symbol=${symbol}` : '';
+  const normSymbol = toMexcSymbol(symbol);
+  const params = normSymbol ? `?symbol=${normSymbol}` : '';
   const response = await callMexcPrivateApi(`/api/v1/private/order/list/open_orders${params}`, 'GET');
   return response.data || [];
 }
@@ -229,11 +249,12 @@ export async function getOrderStatus(symbol, orderId) {
  * Lấy tick size của symbol
  */
 export async function getSymbolTickSize(symbol) {
+  const normSymbol = toMexcSymbol(symbol);
   try {
-    const symbolInfo = await getMexcSymbolInfo(symbol);
+    const symbolInfo = await getMexcSymbolInfo(normSymbol);
     return parseFloat(symbolInfo.priceUnit || 0);
   } catch (error) {
-    console.warn(`Lỗi khi lấy tick size cho ${symbol} từ MEXC, dùng mặc định 0.0001:`, error.message);
+    console.warn(`Lỗi khi lấy tick size cho ${normSymbol} từ MEXC, dùng mặc định 0.0001:`, error.message);
     return 0.0001;
   }
 }
@@ -243,11 +264,12 @@ export async function getSymbolTickSize(symbol) {
  * @returns {Promise<{ exists: boolean, symbol: string, info: any }>}
  */
 export async function checkContractSymbol(symbol) {
+  const normSymbol = toMexcSymbol(symbol);
   try {
-    const info = await getMexcSymbolInfo(symbol);
-    return { exists: info !== null && info !== undefined, symbol, info };
+    const info = await getMexcSymbolInfo(normSymbol);
+    return { exists: info !== null && info !== undefined, symbol: normSymbol, info };
   } catch {
-    return { exists: false, symbol, info: null };
+    return { exists: false, symbol: normSymbol, info: null };
   }
 }
 
@@ -257,11 +279,12 @@ export async function checkContractSymbol(symbol) {
  */
 export async function placeStopOrder(order = {}) {
   const { symbol, side, vol, stopPrice, positionSide } = order;
+  const normSymbol = toMexcSymbol(symbol);
   // MEXC: side 1=open long, 2=close short, 3=open short, 4=close long
   // Để close short (SL cho lệnh short) → side = 4 nếu positionSide LONG, ngược lại
   const mexcSide = (positionSide === 'SHORT' || side === 'BUY') ? 4 : 2;
   const payload = {
-    symbol,
+    symbol: normSymbol,
     vol,
     side: mexcSide,
     type: 5,           // Market order
@@ -273,7 +296,7 @@ export async function placeStopOrder(order = {}) {
   const result = await placeMexcPlanOrder(payload);
   return {
     orderId: result?.data,
-    symbol,
+    symbol: normSymbol,
     raw: result,
   };
 }
@@ -282,5 +305,5 @@ export async function placeStopOrder(order = {}) {
  * Lấy lịch sử lệnh
  */
 export async function getOrderHistory(symbol, limit = 50) {
-  return getMexcOrderHistory(symbol, limit);
+  return getMexcOrderHistory(toMexcSymbol(symbol), limit);
 }

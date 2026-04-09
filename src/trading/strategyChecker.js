@@ -49,6 +49,25 @@ function isOverbought80(rsiData, timeframe) {
 }
 
 /**
+ * Kiểm tra RSI có đạt >= xx không
+ * @param {Object} rsiData - Object chứa RSI của các timeframes
+ * @param {string} timeframe - Timeframe cần kiểm tra
+ * @returns {boolean} true nếu RSI >= threshold
+ */
+function isOverbought(rsiData, timeframe, threshold = 80) {
+  if (!rsiData || typeof rsiData !== 'object') {
+    return false;
+  }
+
+  const rsi = rsiData[timeframe];
+  if (rsi === null || isNaN(rsi)) {
+    return false;
+  }
+
+  return rsi >= threshold;
+}
+
+/**
  * Helper kiểm tra nến đảo chiều có cache để tránh gọi API nhiều lần cho cùng 1 token
  */
 async function checkReversalSignalCached(token, timeframes) {
@@ -175,7 +194,7 @@ export async function checkStrategy2(token) {
   }
 
   // Thêm điều kiện: RSI H8 >= 80
-  if (!isOverbought80(token.rsi, 'Hour8')) {
+  if (!isOverbought(token.rsi, 'Hour8', 84)) {
     return {
       matched: false,
       reason: 'RSI H8 chưa đạt 80+',

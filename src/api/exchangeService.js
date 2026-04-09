@@ -9,8 +9,9 @@
  *
  * Tất cả export đều tuân theo contract định nghĩa trong exchangeInterface.js
  */
+import { config } from '../config.js';
 
-const provider = (process.env.EXCHANGE_PROVIDER || 'bingx').toLowerCase().trim();
+const provider = config.exchangeProvider;
 
 let service;
 

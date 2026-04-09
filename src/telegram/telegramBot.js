@@ -116,7 +116,7 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
             emoji = '🟢'; // oversold (có thể mua vào)
             rsiValue = `*${rsiValue}*`; // Bold cho oversold
           } else if (status === 'overbought') {
-            emoji = '🔴'; // overbought (có thể bán ra)
+            emoji = rsi >= 90 ? '🔴' : '🟠'; // overbought (>=90 màu đỏ, còn lại màu cam)
             rsiValue = `*${rsiValue}*`; // Bold cho overbought
           }
 
@@ -259,7 +259,7 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
             emoji = '🟢'; // oversold (có thể mua vào)
             rsiValue = `*${rsiValue}*`; // Bold cho oversold
           } else if (status === 'overbought') {
-            emoji = '🔴'; // overbought (có thể bán ra)
+            emoji = rsi >= 90 ? '🔴' : '🟠'; // overbought (có thể bán ra)
             rsiValue = `*${rsiValue}*`; // Bold cho overbought
           }
 
@@ -443,7 +443,7 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
           emoji = '🟢'; // oversold (có thể mua vào)
           rsiValue = `*${rsiValue}*`; // Bold cho oversold
         } else if (status === 'overbought') {
-          emoji = '🔴'; // overbought (có thể bán ra)
+          emoji = rsi >= 90 ? '🔴' : '🟠'; // overbought (>=90 màu đỏ, còn lại màu cam)
           rsiValue = `*${rsiValue}*`; // Bold cho overbought
         }
 

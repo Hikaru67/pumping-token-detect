@@ -139,7 +139,7 @@ export function calculateEntryVolume(accountBalance, volumePercent, leverage = 1
 }
 
 /**
- * Kiểm tra symbol có tồn tại trên BingX không
+ * Kiểm tra symbol có tồn tại trên sàn hay không
  * @param {string} symbol - Symbol (ví dụ: BTC hoặc BTC-USDT)
  * @returns {Promise<boolean>} true nếu symbol tồn tại
  */
@@ -246,12 +246,12 @@ export async function checkPreTradeConditions(token, fundingRateThreshold, pumpT
     }
   }
 
-  // 2. Kiểm tra symbol có trên BingX không
+  // 2. Kiểm tra symbol có trên MEXC/BingX không
   const symbolExists = await checkSymbolExists(baseSymbol);
   if (!symbolExists) {
     return {
       canTrade: false,
-      reason: `Symbol ${baseSymbol} không tồn tại trên BingX`,
+      reason: `Symbol ${baseSymbol} không tồn tại trên sàn ${config.exchangeProvider.toUpperCase()}`,
       fundingRate,
     };
   }
