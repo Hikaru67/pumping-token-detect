@@ -199,13 +199,13 @@ export async function checkAndExecuteTrade(token) {
 
   // Lấy giá hiện tại (nến M1 mới nhất) thao tác kiểm tra giá xả và chuẩn bị convert size lệnh ra Token
   let currentExecutionPrice = token.lastPrice;
-  
+
   try {
     const currentKline = await fetchKlineData(token.symbol, 'Min1', 2);
     if (currentKline && currentKline.close && currentKline.close.length > 0) {
       const currentPriceStr = currentKline.close[currentKline.close.length - 1];
       const currentPrice = parseFloat(currentPriceStr);
-      
+
       if (!isNaN(currentPrice) && token.lastPrice) {
         currentExecutionPrice = currentPrice;
         // dropPercent: Tính tỷ lệ giá rơi từ token.lastPrice xuống currentPrice 
@@ -232,7 +232,7 @@ export async function checkAndExecuteTrade(token) {
             fundingRate: preTradeCheck.fundingRate,
           };
         }
-        
+
         console.log(`   ✅ [${token.symbol}] Chênh lệch giá an toàn: xả ${dropPercent.toFixed(2)}%, pump ${pumpPercent.toFixed(2)}%, ratio ${dropPumpRatio.toFixed(3)} < ${dropPumpRatioThreshold} (M1: ${currentPrice}, Khởi điểm: ${token.lastPrice})`);
       }
     }
@@ -321,7 +321,7 @@ export async function checkAndExecuteTrade(token) {
   // Chuyển đổi Volume (USDT Notional Value) sang Quantity (Lượng Token) để gọi API BingX
   // Quantity = (Margin * Leverage) / Khớp Giá Hiện Tại
   let finalTokenQuantity = finalEntryVolume / currentExecutionPrice;
-  
+
   // Làm tròn để tránh API từ chối do quá nhiều số thập phân
   if (finalTokenQuantity > 100) {
     finalTokenQuantity = Math.floor(finalTokenQuantity);
@@ -338,8 +338,7 @@ export async function checkAndExecuteTrade(token) {
   const baseSymbol = getBaseSymbol(token.symbol);
   const orderResult = await placeShortOrder(
     baseSymbol,
-    finalTokenQuantity,
-    config.tradingLeverage
+    finalTokenQuantity
   );
 
   if (orderResult.success) {
@@ -398,6 +397,7 @@ export async function checkAndExecuteTrade(token) {
 
     return tradeResult;
   } else {
+    console.log(orderResult);
     console.error(`   ❌ [${token.symbol}] Lỗi khi vào lệnh: ${orderResult.error}`);
     logTradeHistory(token.symbol, `Lỗi khi vào lệnh qua API BingX: ${orderResult.error}`);
     return {

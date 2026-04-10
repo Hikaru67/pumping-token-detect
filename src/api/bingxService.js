@@ -144,10 +144,8 @@ export async function callBingxApi({
     const response = await httpClient(axiosConfig);
     return parseResponse(response);
   } catch (error) {
-    console.log('🚀 ~ error:', error)
     if (error.response) {
-      const message = error.response.data?.msg || error.response.data?.message || error.response.statusText;
-      throw new Error(`BingX API Error ${error.response.status}: ${message}`);
+      throw error
     }
     if (error.request) {
       throw new Error('Không thể kết nối tới BingX API. Vui lòng kiểm tra mạng hoặc API key.');
