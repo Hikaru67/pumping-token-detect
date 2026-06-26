@@ -955,8 +955,7 @@ function formatAutoTradeMessage(tradeResult, token) {
   const pumpPercent = (token.riseFallRate * 100).toFixed(2);
   const sign = token.riseFallRate >= 0 ? '+' : '';
 
-  let message = `🎯 *VÀO LỆNH TỰ ĐỘNG*\n\n`;
-  message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+  let message = `🎯 $${cleanSymbolName} *VÀO LỆNH TỰ ĐỘNG*\n\n`;
   message += `📊 *Chiến thuật:* ${tradeResult.strategy}\n`;
   message += `📈 *Pump:* ${sign}${pumpPercent}%\n`;
   message += `💵 *Volume:* ${tradeResult.volume?.toFixed(8) || 'N/A'}\n`;
@@ -1106,10 +1105,9 @@ function formatTakeProfitMessage(tpData) {
   });
 
   const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
-  const action = isUpdate ? '🔄 *CẬP NHẬT TP* \\(nhồi lệnh\\)' : '🎯 *ĐẶT TAKE PROFIT*';
+  const action = isUpdate ? `🔄 $${cleanSymbolName} *CẬP NHẬT TP* \\(nhồi lệnh\\)` : `🎯 $${cleanSymbolName} *ĐẶT TAKE PROFIT*`;
 
   let message = `${action}\n\n`;
-  message += `💰 *Symbol:* $${cleanSymbolName}\n`;
   message += `📍 *Avg Entry:* ${avgEntryPrice}\n`;
   message += `📈 *Pump:* \\+${(pumpPercent * 100).toFixed(1)}%\n`;
   message += `📦 *Tổng qty:* ${totalQty}\n\n`;
@@ -1170,8 +1168,7 @@ export async function sendBreakevenSLNotification(data) {
     });
 
     const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
-    let message = `🛡️ *SL KÉO VỀ BREAKEVEN*\n\n`;
-    message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+    let message = `🛡️ *$${cleanSymbolName} SL KÉO VỀ BREAKEVEN*\n\n`;
     message += `✅ *TP1 đã khớp\\!* Kéo SL về entry price\n`;
     message += `📍 *SL Price:* ${entryPrice} \\(entry\\)\n`;
     message += `📦 *Qty còn lại:* ${remainingQty}\n`;
@@ -1214,11 +1211,13 @@ export async function sendTakeProfitFilledNotification(data) {
     });
 
     const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
-    let message = `🎯 *TAKE PROFIT ${level} KHỚP*\n\n`;
-    message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+    let message = `🎯 *$${cleanSymbolName} TAKE PROFIT ${level} KHỚP*\n\n`;
     message += `✅ *Chúc mừng:* TP${level} của mã này đã được chốt hoàn toàn\\!\n`;
     if (price) {
       message += `📍 *Giá khớp:* ${price}\n`;
+    }
+    if (data.accountPnlPercent !== undefined && data.accountPnlPercent !== null) {
+      message += `📈 *PNL:* ~${data.accountPnlPercent.toFixed(2)}%\n`;
     }
     if (tpOrderId) {
       message += `🆔 *Order ID:* ${escapeMarkdown(String(tpOrderId))}\n`;

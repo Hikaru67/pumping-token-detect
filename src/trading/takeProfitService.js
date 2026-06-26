@@ -123,9 +123,9 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
   const pnlPercent3 = balance > 0 ? (((avgEntryPrice - tp3Price) * qty3) / balance) * 100 : 0;
 
   console.log(`\n📐 [${symbol}] Tính mức TP (pump ${(pumpPercent * 100).toFixed(1)}%, entry ${avgEntryPrice}):`);
-  console.log(`   TP1: ${(config.tpClosePercent1)}% qty (${qty1}) @ ${tp1Price} (profit ${(dropRatio1 * 100).toFixed(2)}% | PNL ~${pnlPercent1.toFixed(2)}% acc)`);
-  console.log(`   TP2: ${(config.tpClosePercent2)}% qty (${qty2}) @ ${tp2Price} (profit ${(dropRatio2 * 100).toFixed(2)}% | PNL ~${pnlPercent2.toFixed(2)}% acc)`);
-  console.log(`   TP3: ${(config.tpClosePercent3)}% qty (${qty3}) @ ${tp3Price} (profit ${(dropRatio3 * 100).toFixed(2)}% | PNL ~${pnlPercent3.toFixed(2)}% acc)`);
+  console.log(`   TP1: ${(config.tpClosePercent1)}% qty (${qty1}) @ ${tp1Price} (profit ${(dropRatio1 * 100).toFixed(2)}% | PNL ~${pnlPercent1.toFixed(2)}%)`);
+  console.log(`   TP2: ${(config.tpClosePercent2)}% qty (${qty2}) @ ${tp2Price} (profit ${(dropRatio2 * 100).toFixed(2)}% | PNL ~${pnlPercent2.toFixed(2)}%)`);
+  console.log(`   TP3: ${(config.tpClosePercent3)}% qty (${qty3}) @ ${tp3Price} (profit ${(dropRatio3 * 100).toFixed(2)}% | PNL ~${pnlPercent3.toFixed(2)}%)`);
 
   const levels = [
     { level: 1, price: tp1Price, qty: qty1 },
@@ -168,6 +168,9 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
     tp1Price,
     tp2Price,
     tp3Price,
+    tp1Qty: qty1,
+    tp2Qty: qty2,
+    tp3Qty: qty3,
     tp1Filled: false,
     tp2Filled: false,
     tp3Filled: false,
@@ -383,12 +386,30 @@ export async function checkTPState() {
               console.log(`   ✅ [${baseSymbol}] Lệnh TP${level} đã khớp hoàn toàn (FILLED)!`);
               state[filledKey] = true;
 
+              // Calculate PNL
+              let accountPnlPercent = null;
+              try {
+                const { getBingxUSDTBalance } = await import('../api/bingxService.js');
+                const balance = await getBingxUSDTBalance();
+                if (balance > 0) {
+                  const qty = state[`tp${level}Qty`];
+                  const entryPrice = state.avgEntryPrice;
+                  const tpPrice = state[priceKey];
+                  if (qty && entryPrice && tpPrice) {
+                    accountPnlPercent = (((entryPrice - tpPrice) * qty) / balance) * 100;
+                  }
+                }
+              } catch (err) {
+                console.warn(`   ⚠️  [${baseSymbol}] Lỗi tính PNL TP${level} filled:`, err.message);
+              }
+
               // Gửi báo cáo TP khớp qua vi-VN Telegram
               sendTakeProfitFilledNotification({
                 symbol: baseSymbol,
                 level,
                 tpOrderId,
-                price: state[priceKey]
+                price: state[priceKey],
+                accountPnlPercent
               }).catch(err => console.warn(`⚠️ Lỗi gửi Telegram TP${level} filled:`, err.message));
 
               // Nếu là TP1 => trigger S/L
@@ -397,7 +418,7 @@ export async function checkTPState() {
               }
             }
           } else {
-             console.log(`   ⏳ [${baseSymbol}] TP${level} chưa khớp (còn trong open orders)`);
+            console.log(`   ⏳ [${baseSymbol}] TP${level} chưa khớp (còn trong open orders)`);
           }
         }
       }
