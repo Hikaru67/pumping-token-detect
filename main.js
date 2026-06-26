@@ -1,6 +1,7 @@
 import { startScheduler } from './src/schedulers/scheduler.js';
 import { startDropScheduler } from './src/schedulers/dropScheduler.js';
 import { startTakeProfitScheduler } from './src/schedulers/takeProfitScheduler.js';
+import { startTelegramListener } from './src/telegram/telegramListener.js';
 
 // Xử lý lỗi không bắt được
 process.on('unhandledRejection', (reason, promise) => {
@@ -34,11 +35,14 @@ startScheduler();
 // Khởi động Take Profit Scheduler (theo dõi TP1 fill để đặt SL breakeven)
 startTakeProfitScheduler();
 
+// Khởi động Telegram Listener để bắt lệnh từ channel
+startTelegramListener();
+
 // Khởi động Drop Token Scheduler
 // off drop scheduler
 // startDropScheduler();
 
 console.log('='.repeat(60));
-console.log('✅ Tất cả schedulers đã được khởi động');
+console.log('✅ Tất cả schedulers và listeners đã được khởi động');
 console.log('='.repeat(60));
 

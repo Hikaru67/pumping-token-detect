@@ -1114,8 +1114,12 @@ function formatTakeProfitMessage(tpData) {
   message += `📈 *Pump:* \\+${(pumpPercent * 100).toFixed(1)}%\n`;
   message += `📦 *Tổng qty:* ${totalQty}\n\n`;
   message += `📊 *Các mức Take Profit:*\n`;
-  levels.forEach(({ level, price, qty, profitPercent }) => {
-    message += `   TP${level}: @ ${price} \\| ${qty} qty \\| profit ~${profitPercent.toFixed(1)}%\n`;
+  levels.forEach(({ level, price, qty, profitPercent, accountPnlPercent }) => {
+    let pnlText = ``;
+    if (accountPnlPercent !== undefined) {
+      pnlText = ` \\| PNL ~${accountPnlPercent.toFixed(2)}%\n`;
+    }
+    message += `   TP${level}: @ ${price} \\| ${qty} qty \\| profit ~${profitPercent.toFixed(1)}%${pnlText}\n`;
   });
   message += `\n⏰ ${timestamp}`;
   return message;

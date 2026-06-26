@@ -197,6 +197,23 @@ export async function getBingxAccountBalance(currency = 'USDT') {
 }
 
 /**
+ * Lấy trực tiếp số dư USDT khả dụng (dạng số)
+ * @returns {Promise<number>}
+ */
+export async function getBingxUSDTBalance() {
+  try {
+    const res = await getBingxAccountBalance('USDT');
+    if (res && res.balance && res.balance.balance) {
+      return parseFloat(res.balance.balance);
+    }
+    return 0;
+  } catch (error) {
+    console.error('Lỗi khi lấy balance USDT:', error.message);
+    return 0;
+  }
+}
+
+/**
  * Kiểm tra BingX có hỗ trợ contract symbol cụ thể hay không
  * Docs: https://bingx-api.github.io/docs/swapV2/quote/market.html#symbols
  * @param {string} symbol - Ví dụ: BTC hoặc BTC-USDT
@@ -420,4 +437,43 @@ export async function getSymbolTickSize(symbol) {
   }
 }
 
+/**
+ * Lấy lịch sử thu nhập (PNL, Fee, Funding) trong khoảng thời gian.
+ * Do BingX giới hạn tối đa 30 ngày mỗi request, hàm này sẽ tự động chia nhỏ khoảng thời gian.
+ * @param {number} startTime - Timestamp (ms)
+ * @param {number} endTime - Timestamp (ms)
+ * @returns {Promise<Array>} Mảng các record thu nhập
+ */
+export async function getBingxIncomeHistory(startTime, endTime) {
+  const MAX_INTERVAL = 30 * 24 * 60 * 60 * 1000 - 1000; // Gần 30 ngày
+  let currentStart = startTime;
+  let allData = [];
 
+  while (currentStart < endTime) {
+    let currentEnd = currentStart + MAX_INTERVAL;
+    if (currentEnd > endTime) {
+      currentEnd = endTime;
+    }
+
+    try {
+      const data = await callBingxPrivateApi('/openApi/swap/v2/user/income', {
+        startTime: currentStart,
+        endTime: currentEnd,
+        limit: 1000,
+      });
+      
+      if (Array.isArray(data)) {
+        allData = allData.concat(data);
+      } else if (data && Array.isArray(data.incomeList)) {
+        allData = allData.concat(data.incomeList);
+      }
+    } catch (error) {
+      console.error(`⚠️ Lỗi khi lấy income từ ${new Date(currentStart).toISOString()} đến ${new Date(currentEnd).toISOString()}:`, error.message);
+      // Bỏ qua lỗi 1 request để cố gắng lấy các khoảng khác, hoặc break
+    }
+
+    currentStart = currentEnd + 1; // Nhích lên 1ms để tránh trùng
+  }
+
+  return allData;
+}

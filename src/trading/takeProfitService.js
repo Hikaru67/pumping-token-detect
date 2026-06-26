@@ -4,6 +4,7 @@ import {
   getBingxOpenOrders,
   cancelAllBingxOrders,
   getSymbolTickSize,
+  getBingxUSDTBalance,
 } from '../api/bingxService.js';
 import { config } from '../config.js';
 import { getBaseSymbol } from '../utils/symbolUtils.js';
@@ -116,10 +117,15 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
   const { tp1Price, tp2Price, tp3Price } = calculateTPLevels(avgEntryPrice, pumpPercent, tickSize);
   const { qty1, qty2, qty3 } = calculateTPQuantities(totalQty);
 
+  const balance = await getBingxUSDTBalance();
+  const pnlPercent1 = balance > 0 ? (((avgEntryPrice - tp1Price) * qty1) / balance) * 100 : 0;
+  const pnlPercent2 = balance > 0 ? (((avgEntryPrice - tp2Price) * qty2) / balance) * 100 : 0;
+  const pnlPercent3 = balance > 0 ? (((avgEntryPrice - tp3Price) * qty3) / balance) * 100 : 0;
+
   console.log(`\n📐 [${symbol}] Tính mức TP (pump ${(pumpPercent * 100).toFixed(1)}%, entry ${avgEntryPrice}):`);
-  console.log(`   TP1: ${(config.tpClosePercent1)}% qty (${qty1}) @ ${tp1Price} (profit ${(dropRatio1 * 100).toFixed(2)}%)`);
-  console.log(`   TP2: ${(config.tpClosePercent2)}% qty (${qty2}) @ ${tp2Price} (profit ${(dropRatio2 * 100).toFixed(2)}%)`);
-  console.log(`   TP3: ${(config.tpClosePercent3)}% qty (${qty3}) @ ${tp3Price} (profit ${(dropRatio3 * 100).toFixed(2)}%)`);
+  console.log(`   TP1: ${(config.tpClosePercent1)}% qty (${qty1}) @ ${tp1Price} (profit ${(dropRatio1 * 100).toFixed(2)}% | PNL ~${pnlPercent1.toFixed(2)}% acc)`);
+  console.log(`   TP2: ${(config.tpClosePercent2)}% qty (${qty2}) @ ${tp2Price} (profit ${(dropRatio2 * 100).toFixed(2)}% | PNL ~${pnlPercent2.toFixed(2)}% acc)`);
+  console.log(`   TP3: ${(config.tpClosePercent3)}% qty (${qty3}) @ ${tp3Price} (profit ${(dropRatio3 * 100).toFixed(2)}% | PNL ~${pnlPercent3.toFixed(2)}% acc)`);
 
   const levels = [
     { level: 1, price: tp1Price, qty: qty1 },
@@ -176,9 +182,9 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
     pumpPercent,
     totalQty,
     levels: [
-      { level: 1, price: tp1Price, qty: qty1, profitPercent: dropRatio1 * 100 },
-      { level: 2, price: tp2Price, qty: qty2, profitPercent: dropRatio2 * 100 },
-      { level: 3, price: tp3Price, qty: qty3, profitPercent: dropRatio3 * 100 },
+      { level: 1, price: tp1Price, qty: qty1, profitPercent: dropRatio1 * 100, accountPnlPercent: pnlPercent1 },
+      { level: 2, price: tp2Price, qty: qty2, profitPercent: dropRatio2 * 100, accountPnlPercent: pnlPercent2 },
+      { level: 3, price: tp3Price, qty: qty3, profitPercent: dropRatio3 * 100, accountPnlPercent: pnlPercent3 },
     ],
     isUpdate: false,
   }).catch(err => console.warn(`⚠️  [${symbol}] Lỗi gửi Telegram TP:`, err.message));
