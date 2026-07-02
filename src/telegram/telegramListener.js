@@ -107,10 +107,10 @@ async function handlePnlCommand(chatId, topicId = null) {
     }
 
     const now = Date.now();
-    const halfYearAgo = now - 180 * 24 * 60 * 60 * 1000;
+    const threeMonthsAgo = now - 90 * 24 * 60 * 60 * 1000;
 
-    // Lấy toàn bộ lịch sử 180 ngày
-    const incomeHistory = await getBingxIncomeHistory(halfYearAgo, now);
+    // Lấy toàn bộ lịch sử 90 ngày
+    const incomeHistory = await getBingxIncomeHistory(threeMonthsAgo, now);
 
     // Tính toán PNL cho từng khoảng thời gian
     // Các incomeType quan trọng: REALIZED_PNL, TRADING_FEE, FUNDING_FEE
