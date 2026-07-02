@@ -107,10 +107,10 @@ async function handlePnlCommand(chatId, topicId = null) {
     }
 
     const now = Date.now();
-    const threeMonthsAgo = now - 90 * 24 * 60 * 60 * 1000;
+    const sixMonthsAgo = now - 180 * 24 * 60 * 60 * 1000;
 
-    // Lấy toàn bộ lịch sử 90 ngày
-    const incomeHistory = await getBingxIncomeHistory(threeMonthsAgo, now);
+    // Lấy toàn bộ lịch sử 180 ngày
+    const incomeHistory = await getBingxIncomeHistory(sixMonthsAgo, now);
 
     // Tính toán PNL cho từng khoảng thời gian
     // Các incomeType quan trọng: REALIZED_PNL, TRADING_FEE, FUNDING_FEE
@@ -125,6 +125,7 @@ async function handlePnlCommand(chatId, topicId = null) {
     const pnl7d = calculatePnlForDays(7);
     const pnl30d = calculatePnlForDays(30);
     const pnl90d = calculatePnlForDays(90);
+    const pnl180d = calculatePnlForDays(180);
 
     let message = `📊 *BÁO CÁO PNL TÀI KHOẢN*\n`;
 
@@ -132,6 +133,7 @@ async function handlePnlCommand(chatId, topicId = null) {
     message += `📅 *7 Ngày qua:* ${formatNumberWithSign((pnl7d / balance) * 100)}%\n`;
     message += `📅 *30 Ngày qua:* ${formatNumberWithSign((pnl30d / balance) * 100)}%\n`;
     message += `📅 *3 Tháng qua:* ${formatNumberWithSign((pnl90d / balance) * 100)}%\n`;
+    message += `📅 *6 Tháng qua:* ${formatNumberWithSign((pnl180d / balance) * 100)}%\n`;
 
     const timestamp = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
     message += `⏰ ${timestamp}`;
