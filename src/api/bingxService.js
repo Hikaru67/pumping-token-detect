@@ -222,7 +222,7 @@ export async function getBingxUSDTBalance() {
  */
 export async function checkBingxContractSymbol(symbol, quote = 'USDT') {
   const normalizedSymbol = normalizeContractSymbol(symbol, quote);
-  
+
   // Thử các endpoint khác nhau để lấy thông tin symbol
   const endpoints = [
     // `/market/ticker` trả 100404 trên sandbox → dùng `/quote/ticker`
@@ -230,11 +230,11 @@ export async function checkBingxContractSymbol(symbol, quote = 'USDT') {
     { path: '/openApi/swap/v2/quote/contracts', params: {} },
     { path: '/openApi/swap/v2/market/symbols', params: {} },
   ];
-  
+
   for (const { path, params } of endpoints) {
     try {
       const data = await callBingxPublicApi(path, params);
-      
+
       // Nếu là object có symbol, kiểm tra trực tiếp
       if (data && typeof data === 'object' && data.symbol) {
         if ((data.symbol || '').toUpperCase() === normalizedSymbol) {
@@ -245,14 +245,14 @@ export async function checkBingxContractSymbol(symbol, quote = 'USDT') {
           };
         }
       }
-      
+
       // Nếu là array, tìm trong array
       if (Array.isArray(data)) {
         const info = data.find((item) => {
           const itemSymbol = item.symbol || item.contractName || item.name;
           return itemSymbol && itemSymbol.toUpperCase() === normalizedSymbol;
         });
-        
+
         if (info) {
           return {
             exists: true,
@@ -261,7 +261,7 @@ export async function checkBingxContractSymbol(symbol, quote = 'USDT') {
           };
         }
       }
-      
+
       // Nếu data có field chứa array (như data.symbols, data.contracts)
       if (data && typeof data === 'object') {
         for (const key of ['symbols', 'contracts', 'data']) {
@@ -270,7 +270,7 @@ export async function checkBingxContractSymbol(symbol, quote = 'USDT') {
               const itemSymbol = item.symbol || item.contractName || item.name;
               return itemSymbol && itemSymbol.toUpperCase() === normalizedSymbol;
             });
-            
+
             if (info) {
               return {
                 exists: true,
@@ -287,7 +287,7 @@ export async function checkBingxContractSymbol(symbol, quote = 'USDT') {
       continue;
     }
   }
-  
+
   // Nếu tất cả endpoint đều fail, trả về false
   console.warn(`⚠️  Không thể kiểm tra symbol ${normalizedSymbol} từ bất kỳ endpoint nào`);
   return {
@@ -448,6 +448,7 @@ export async function getBingxIncomeHistory(startTime, endTime) {
   const MAX_INTERVAL = 30 * 24 * 60 * 60 * 1000 - 1000; // Gần 30 ngày
   let currentStart = startTime;
   let allData = [];
+  const type = 'REALIZED_PNL';
 
   while (currentStart < endTime) {
     let currentEnd = currentStart + MAX_INTERVAL;
@@ -460,8 +461,9 @@ export async function getBingxIncomeHistory(startTime, endTime) {
         startTime: currentStart,
         endTime: currentEnd,
         limit: 1000,
+        incomeType: type
       });
-      
+
       if (Array.isArray(data)) {
         allData = allData.concat(data);
       } else if (data && Array.isArray(data.incomeList)) {
@@ -473,6 +475,9 @@ export async function getBingxIncomeHistory(startTime, endTime) {
     }
 
     currentStart = currentEnd + 1; // Nhích lên 1ms để tránh trùng
+
+    // Đợi 250ms để tránh rate limit (5 requests/s)
+    await new Promise(resolve => setTimeout(resolve, 250));
   }
 
   return allData;
