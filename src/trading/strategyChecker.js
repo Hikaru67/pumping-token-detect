@@ -375,6 +375,17 @@ export async function checkAllStrategies(token) {
     };
   }
 
+  // Kiểm tra giá pump có đạt ngưỡng tối thiểu không (rule toàn cục)
+  const pumpPercent = token.riseFallRate ? (token.riseFallRate * 100) : 0;
+  if (pumpPercent < config.tradingPumpThreshold) {
+    console.log(`   ⏭️  [${token.symbol}] Bỏ qua: Biên độ dao động giá (${pumpPercent.toFixed(2)}%) < ngưỡng quy định toàn cục (${config.tradingPumpThreshold}%)`);
+    return {
+      executed: false,
+      reason: `Biên độ giá (${pumpPercent.toFixed(2)}%) < ${config.tradingPumpThreshold}%`,
+      orderResult: null,
+    };
+  }
+
   // Check Strategy 2
   const strategy2Result = await checkStrategy2(token);
   if (strategy2Result.matched) {

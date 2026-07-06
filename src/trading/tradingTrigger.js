@@ -101,17 +101,6 @@ export async function checkAndExecuteTrade(token) {
 
   console.log(`\n🔍 [${token.symbol}] Kiểm tra trading trigger (${superOverboughtCount} RSI super overbought)...`);
 
-  // Kiểm tra giá pump có đạt ngưỡng tối thiểu không (rule toàn cục)
-  const pumpPercent = token.riseFallRate ? (token.riseFallRate * 100) : 0;
-  if (pumpPercent < config.tradingPumpThreshold) {
-    console.log(`   ⏭️  [${token.symbol}] Bỏ qua: Biên độ dao động giá (${pumpPercent.toFixed(2)}%) < ngưỡng quy định toàn cục (${config.tradingPumpThreshold}%)`);
-    return {
-      executed: false,
-      reason: `Biên độ giá (${pumpPercent.toFixed(2)}%) < ${config.tradingPumpThreshold}%`,
-      orderResult: null,
-    };
-  }
-
   // Kiểm tra các chiến thuật trước (để lấy strategy id)
   const strategyResult = await checkAllStrategies(token);
 
@@ -173,13 +162,13 @@ export async function checkAndExecuteTrade(token) {
 
   // Lấy giá hiện tại (nến M1 mới nhất) thao tác kiểm tra giá xả và chuẩn bị convert size lệnh ra Token
   let currentExecutionPrice = token.lastPrice;
-  
+
   try {
     const currentKline = await fetchKlineData(token.symbol, 'Min1', 2);
     if (currentKline && currentKline.close && currentKline.close.length > 0) {
       const currentPriceStr = currentKline.close[currentKline.close.length - 1];
       const currentPrice = parseFloat(currentPriceStr);
-      
+
       if (!isNaN(currentPrice) && token.lastPrice) {
         currentExecutionPrice = currentPrice;
         // dropPercent: Tính tỷ lệ giá rơi từ token.lastPrice xuống currentPrice 
@@ -206,7 +195,7 @@ export async function checkAndExecuteTrade(token) {
             fundingRate: preTradeCheck.fundingRate,
           };
         }
-        
+
         console.log(`   ✅ [${token.symbol}] Chênh lệch giá an toàn: xả ${dropPercent.toFixed(2)}%, pump ${pumpPercent.toFixed(2)}%, ratio ${dropPumpRatio.toFixed(3)} < ${dropPumpRatioThreshold} (M1: ${currentPrice}, Khởi điểm: ${token.lastPrice})`);
       }
     }
@@ -295,7 +284,7 @@ export async function checkAndExecuteTrade(token) {
   // Chuyển đổi Volume (USDT Notional Value) sang Quantity (Lượng Token) để gọi API BingX
   // Quantity = (Margin * Leverage) / Khớp Giá Hiện Tại
   let finalTokenQuantity = finalEntryVolume / currentExecutionPrice;
-  
+
   // Làm tròn để tránh API từ chối do quá nhiều số thập phân
   if (finalTokenQuantity > 100) {
     finalTokenQuantity = Math.floor(finalTokenQuantity);
