@@ -413,8 +413,7 @@ export async function checkAllStrategies(token) {
   }
 
   // Check Strategy 3
-  const pumpPercent = token.riseFallRate ? (token.riseFallRate * 100) : 0;
-  if (pumpPercent > 50) {
+  if (pumpPercent > 40) {
     const strategy3Result = await checkStrategy3(token);
     if (strategy3Result.matched) {
       const { getBaseSymbol } = await import('../utils/symbolUtils.js');
