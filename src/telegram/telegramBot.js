@@ -1239,3 +1239,47 @@ export async function sendTakeProfitFilledNotification(data) {
     return false;
   }
 }
+
+/**
+ * Gửi thông báo khi SL entry (breakeven) bị cán (hit)
+ * @param {Object} data - { symbol, entryPrice, slOrderId }
+ * @returns {Promise<boolean>}
+ */
+export async function sendSLHitNotification(data) {
+  if (!config.telegramBotToken || !config.telegramGroupId || !config.telegramAutoTradeTopicId) {
+    return false;
+  }
+  try {
+    const { symbol, entryPrice, slOrderId } = data;
+    const timestamp = new Date().toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+
+    const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
+    let message = `🚨 *$${cleanSymbolName} CÁN SL BREAKEVEN (ENTRY)*\n\n`;
+    message += `⚠️ Vị thế đã tự động đóng tại giá Entry do chạm Stop Loss hòa vốn\\.\n`;
+    if (entryPrice) {
+      message += `📍 *SL Price:* ${entryPrice} \\(entry\\)\n`;
+    }
+    if (slOrderId) {
+      message += `🆔 *SL Order ID:* ${escapeMarkdown(String(slOrderId))}\n`;
+    }
+    message += `\n⏰ ${timestamp}`;
+
+    const success = await sendToTelegramChat(
+      config.telegramGroupId,
+      message,
+      config.telegramAutoTradeTopicId,
+      false
+    );
+    if (success) {
+      console.log(`✅ Đã gửi thông báo cán SL cho ${symbol}`);
+    }
+    return success;
+  } catch (error) {
+    console.error('❌ Lỗi khi gửi Telegram SL hit notification:', error.message);
+    return false;
+  }
+}

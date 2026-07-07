@@ -12,6 +12,7 @@ import {
   sendTakeProfitNotification,
   sendBreakevenSLNotification,
   sendTakeProfitFilledNotification,
+  sendSLHitNotification,
 } from '../telegram/telegramBot.js';
 
 /**
@@ -435,7 +436,20 @@ export async function checkTPState() {
       const allTpFilled = state.tp1Filled && state.tp2Filled && state.tp3Filled;
 
       if (!stillOpen || allTpFilled) {
-        console.log(`   ℹ️  [${baseSymbol}] Position đã đóng hoàn toàn hoặc All TPs Filled, cleanup TP state`);
+        if (!stillOpen) {
+          if (state.slPlaced && state.slOrderId) {
+            console.log(`   🚨 [${baseSymbol}] Lệnh đã tự động đóng do khớp SL entry hoặc đóng tay | OrderID: ${state.slOrderId}`);
+            sendSLHitNotification({
+              symbol: state.symbol,
+              entryPrice: state.avgEntryPrice,
+              slOrderId: state.slOrderId
+            }).catch(err => console.warn(`⚠️ Lỗi gửi Telegram SL hit:`, err.message));
+          } else {
+            console.log(`   ℹ️  [${baseSymbol}] Vị thế đã đóng hoàn toàn (đóng tay hoặc cán SL mặc định)`);
+          }
+        } else {
+          console.log(`   ℹ️  [${baseSymbol}] Tất cả TP đã khớp (All TPs Filled), cleanup TP state`);
+        }
         tpStateMap.delete(baseSymbol);
       }
 
