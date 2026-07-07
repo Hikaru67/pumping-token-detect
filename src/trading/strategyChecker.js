@@ -381,6 +381,7 @@ export async function checkAllStrategies(token) {
     console.log(`   ⏭️  [${token.symbol}] Bỏ qua: Biên độ dao động giá (${pumpPercent.toFixed(2)}%) < ngưỡng quy định toàn cục (${config.tradingPumpThreshold}%)`);
     return {
       executed: false,
+      result: null,
       reason: `Biên độ giá (${pumpPercent.toFixed(2)}%) < ${config.tradingPumpThreshold}%`,
       orderResult: null,
     };

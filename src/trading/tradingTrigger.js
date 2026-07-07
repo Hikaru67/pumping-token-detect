@@ -108,7 +108,7 @@ export async function checkAndExecuteTrade(token) {
     console.log(`   ⏭️  [${token.symbol}] Không có chiến thuật nào thỏa mãn: ${strategyResult.result.reason}`);
     return {
       executed: false,
-      reason: strategyResult.result.reason,
+      reason: strategyResult.result?.reason,
       orderResult: null,
     };
   }
@@ -170,6 +170,7 @@ export async function checkAndExecuteTrade(token) {
       const currentPrice = parseFloat(currentPriceStr);
 
       if (!isNaN(currentPrice) && token.lastPrice) {
+        const pumpPercent = (token.riseFallRate * 100).toFixed(2);
         currentExecutionPrice = currentPrice;
         // dropPercent: Tính tỷ lệ giá rơi từ token.lastPrice xuống currentPrice 
         const dropPercent = ((token.lastPrice - currentPrice) / token.lastPrice) * 100;
