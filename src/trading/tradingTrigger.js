@@ -105,7 +105,7 @@ export async function checkAndExecuteTrade(token) {
   const strategyResult = await checkAllStrategies(token);
 
   if (!strategyResult.strategy) {
-    console.log(`   ⏭️  [${token.symbol}] Không có chiến thuật nào thỏa mãn: ${strategyResult.result.reason}`);
+    console.log(`   ⏭️  [${token.symbol}] Không có chiến thuật nào thỏa mãn: ${strategyResult.result?.reason}`);
     return {
       executed: false,
       reason: strategyResult.result?.reason,
