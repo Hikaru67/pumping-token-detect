@@ -16,6 +16,17 @@ import { placeTakeProfitOrders, updateTakeProfitOrders, getTPState } from './tak
 // Lưu trữ các lệnh đã vào để tránh vào lệnh trùng lặp
 const executedOrders = new Map(); // key: symbol, value: { timestamp, strategy, volume }
 
+// Dọn dẹp các lệnh cũ mỗi giờ để tránh memory leak
+setInterval(() => {
+  const oneHourAgo = Date.now() - 60 * 60 * 1000;
+  for (const [symbol, order] of executedOrders.entries()) {
+    if (order.timestamp < oneHourAgo) {
+      executedOrders.delete(symbol);
+    }
+  }
+}, 60 * 60 * 1000);
+
+
 /**
  * Kiểm tra xem đã vào lệnh cho symbol này chưa (trong vòng 1 giờ cho cùng 1 chiến thuật)
  * @param {string} symbol - Symbol

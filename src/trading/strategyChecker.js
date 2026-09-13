@@ -143,7 +143,7 @@ export async function checkStrategy1(token) {
 
 /**
  * Chiến thuật 2: Khi điều kiện RSI chiến thuật 1 thỏa mãn VÀ có số lượng RSI super overbought cao (4-5 RSI đạt max)
- * Vào 10% tài khoản và KHÔNG cần điều kiện nến đảo chiều
+ * Vào định mức tài khoản theo config
  * @param {Object} token - Token object có RSI data
  * @returns {Promise<Object>} { matched: boolean, reason: string, superOverboughtCount: number }
  */
@@ -162,20 +162,23 @@ export async function checkStrategy2(token) {
     };
   }
 
-  // Đếm số lượng RSI super overbought
+  // Đếm số lượng RSI super overbought (giữ lại để logging)
   const superOverboughtCount = countSuperOverboughtRSI(token.rsi);
 
-  // Cần ít nhất 4 RSI super overbought
-  if (superOverboughtCount < 4) {
+  // Kiểm tra cụ thể các khung: 5m, 15m, 30m, 1h, 4h đều đạt super overbought (>= 90)
+  const targetTimeframes = ['Min5', 'Min15', 'Min30', 'Hour1', 'Hour4'];
+  const superOverboughtSpecific = targetTimeframes.filter(tf => isSuperOverbought(token.rsi, tf));
+
+  if (superOverboughtSpecific.length !== targetTimeframes.length) {
     return {
       matched: false,
-      reason: `Số lượng RSI super overbought (${superOverboughtCount}) < 4`,
+      reason: `Chưa đủ RSI >= 90 ở các khung M5, M15, M30, H1, H4 (hiện có: ${superOverboughtSpecific.join(', ')})`,
       superOverboughtCount,
     };
   }
 
   // Thêm điều kiện: RSI H8 >= 80
-  if (!isOverbought80(token.rsi, 'Hour8')) {
+  if (!isOverbought80(token.rsi, 'Hour8', 85)) {
     return {
       matched: false,
       reason: 'RSI H8 chưa đạt 80+',
@@ -184,7 +187,7 @@ export async function checkStrategy2(token) {
 
   return {
     matched: true,
-    reason: `Chiến thuật 2: S1 thỏa mãn + H8 >= 80 + ${superOverboughtCount} RSI >= 90`,
+    reason: `Chiến thuật 2: RSI M5, M15, M30, H1, H4 >= 90 + H8 >= 85`,
     superOverboughtCount,
   };
 }
@@ -389,57 +392,57 @@ export async function checkAllStrategies(token) {
   }
 
   // Check Strategy 2
-  const strategy2Result = await checkStrategy2(token);
-  if (strategy2Result.matched) {
-    await appendSignalLog(
-      `[${token.symbol || 'UNKNOWN'}] Chiến thuật 2 THỎA MÃN: ${strategy2Result.reason}`
-    );
-    return {
-      strategy: 2,
-      result: strategy2Result,
-      volumePercent: config.tradingStrategy2VolumePercent || 5, // 5% tài khoản
-    };
-  }
+  // const strategy2Result = await checkStrategy2(token);
+  // if (strategy2Result.matched) {
+  //   await appendSignalLog(
+  //     `[${token.symbol || 'UNKNOWN'}] Chiến thuật 2 THỎA MÃN: ${strategy2Result.reason}`
+  //   );
+  //   return {
+  //     strategy: 2,
+  //     result: strategy2Result,
+  //     volumePercent: config.tradingStrategy2VolumePercent || 5, // 5% tài khoản
+  //   };
+  // }
 
   // Check Strategy 1
-  const strategy1Result = await checkStrategy1(token);
-  if (strategy1Result.matched) {
-    await appendSignalLog(
-      `[${token.symbol || 'UNKNOWN'}] Chiến thuật 1 THỎA MÃN: ${strategy1Result.reason}`
-    );
-    return {
-      strategy: 1,
-      result: strategy1Result,
-      volumePercent: config.tradingStrategy1VolumePercent || 2, // 2% tài khoản
-    };
-  }
+  // const strategy1Result = await checkStrategy1(token);
+  // if (strategy1Result.matched) {
+  //   await appendSignalLog(
+  //     `[${token.symbol || 'UNKNOWN'}] Chiến thuật 1 THỎA MÃN: ${strategy1Result.reason}`
+  //   );
+  //   return {
+  //     strategy: 1,
+  //     result: strategy1Result,
+  //     volumePercent: config.tradingStrategy1VolumePercent || 2, // 2% tài khoản
+  //   };
+  // }
 
   // Check Strategy 3
-  if (pumpPercent > 40) {
-    const strategy3Result = await checkStrategy3(token);
-    if (strategy3Result.matched) {
-      const { getBaseSymbol } = await import('../utils/symbolUtils.js');
-      const { getOpenPositionVolume } = await import('./tradingService.js');
-      const _baseSymbol = getBaseSymbol(token.symbol);
-      const currentOpenVol = await getOpenPositionVolume(_baseSymbol);
+  // if (pumpPercent > 40) {
+  //   const strategy3Result = await checkStrategy3(token);
+  //   if (strategy3Result.matched) {
+  //     const { getBaseSymbol } = await import('../utils/symbolUtils.js');
+  //     const { getOpenPositionVolume } = await import('./tradingService.js');
+  //     const _baseSymbol = getBaseSymbol(token.symbol);
+  //     const currentOpenVol = await getOpenPositionVolume(_baseSymbol);
 
-      if (currentOpenVol > 0) {
-        // Đã có vị thế mở, không thỏa mãn S3 nữa để giảm spam log check
-        await appendSignalLog(
-          `[${token.symbol || 'UNKNOWN'}] Chiến thuật 3 BẦN CÙNG BỎ QUA: Đã có lệnh mở nhồi sẵn (${currentOpenVol})`
-        );
-      } else {
-        await appendSignalLog(
-          `[${token.symbol || 'UNKNOWN'}] Chiến thuật 3 THỎA MÃN: ${strategy3Result.reason}`
-        );
-        return {
-          strategy: 3,
-          result: strategy3Result,
-          volumePercent: config.tradingStrategy3VolumePercent || 1, // 1% tài khoản
-        };
-      }
-    }
-  }
+  //     if (currentOpenVol > 0) {
+  //       // Đã có vị thế mở, không thỏa mãn S3 nữa để giảm spam log check
+  //       await appendSignalLog(
+  //         `[${token.symbol || 'UNKNOWN'}] Chiến thuật 3 BẦN CÙNG BỎ QUA: Đã có lệnh mở nhồi sẵn (${currentOpenVol})`
+  //       );
+  //     } else {
+  //       await appendSignalLog(
+  //         `[${token.symbol || 'UNKNOWN'}] Chiến thuật 3 THỎA MÃN: ${strategy3Result.reason}`
+  //       );
+  //       return {
+  //         strategy: 3,
+  //         result: strategy3Result,
+  //         volumePercent: config.tradingStrategy3VolumePercent || 1, // 1% tài khoản
+  //       };
+  //     }
+  //   }
+  // }
 
   await appendSignalLog(
     `[${token.symbol || 'UNKNOWN'}] KHÔNG có chiến thuật nào thỏa mãn`

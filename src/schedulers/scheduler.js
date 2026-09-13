@@ -413,8 +413,8 @@ async function checkPumpTokens() {
         console.log(`\n📊 Phát hiện RSI Confluence tăng cho ${confluenceInfo.count} token(s):`);
         
         confluenceInfo.increases.forEach(increase => {
-          const statusEmoji = increase.currentConfluence.status === 'oversold' ? '🟢' : '🔴';
-          const statusText = increase.currentConfluence.status === 'oversold' ? 'Oversold' : 'Overbought';
+          const statusEmoji = increase.currentConfluence.status === 'oversold' ? '🟢' : (increase.currentConfluence.status === 'superOverbought' ? '🔴' : '🟠');
+          const statusText = increase.currentConfluence.status === 'oversold' ? 'Oversold' : (increase.currentConfluence.status === 'superOverbought' ? 'Super Overbought' : 'Overbought');
           const timeframesList = increase.currentConfluence.timeframes.join(', ');
           
           // Tìm các timeframe lớn trong confluence

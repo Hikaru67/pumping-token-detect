@@ -1,5 +1,39 @@
 import axios from 'axios';
+import http from 'http';
+import https from 'https';
 import { config } from '../config.js';
+
+/**
+ * Keep-alive agents để tái sử dụng TCP connection giữa các requests.
+ * Thay vì mỗi request phải mở TCP+TLS handshake mới (~30-65ms),
+ * connection được giữ sống và reuse → tiết kiệm đáng kể khi có 70+ requests/cycle.
+ *
+ * maxSockets: số connections tối đa đồng thời đến cùng 1 host
+ * maxFreeSockets: số connections nhàn rỗi được giữ trong pool
+ * timeout: đóng connection nhàn rỗi sau N ms (tránh leak)
+ */
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 20,
+  maxFreeSockets: 10,
+  timeout: 30000,
+});
+
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 20,
+  maxFreeSockets: 10,
+  timeout: 30000,
+});
+
+/**
+ * Axios instance dùng chung cho toàn bộ MEXC API calls.
+ * Mọi request qua instance này đều share cùng connection pool.
+ */
+const axiosInstance = axios.create({
+  httpAgent,
+  httpsAgent,
+});
 
 /**
  * Chuyển đổi interval để gọi API (Hour1 -> Min60)
@@ -37,7 +71,7 @@ export async function fetchKlineData(symbol, interval, limit = 200) {
     const intervalSeconds = getIntervalSeconds(interval); // Vẫn dùng interval gốc để tính toán
     const startTime = now - (limit * intervalSeconds);
 
-    const response = await axios.get(url, {
+    const response = await axiosInstance.get(url, {
       params: {
         interval: apiInterval, // Dùng apiInterval đã convert
         start: startTime,
@@ -107,7 +141,7 @@ function getIntervalSeconds(interval) {
  */
 export async function fetchTickerData() {
   try {
-    const response = await axios.get(config.mexcApiUrl, {
+    const response = await axiosInstance.get(config.mexcApiUrl, {
       timeout: 10000, // 10 seconds timeout
       headers: {
         'Accept': 'application/json',
@@ -150,7 +184,7 @@ export async function fetchTickerData() {
 export async function fetchFundingRateHistory(symbol) {
   try {
     const url = `https://futures.mexc.co/api/v1/contract/funding_rate/history`;
-    const response = await axios.get(url, {
+    const response = await axiosInstance.get(url, {
       params: {
         symbol: symbol,
         page_num: 1,

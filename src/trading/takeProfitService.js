@@ -53,7 +53,14 @@ export function roundToTickSize(price, tickSize) {
   if (!tickSize || tickSize <= 0) return parseFloat(price.toFixed(8));
   const rounded = Math.round(price / tickSize) * tickSize;
   // Số chữ số thập phân của tickSize
-  const decimals = (tickSize.toString().split('.')[1] || '').length;
+  let decimals = 0;
+  const tickStr = String(tickSize);
+  if (tickStr.includes('e-')) {
+    decimals = parseInt(tickStr.split('e-')[1], 10);
+  } else if (tickStr.includes('.')) {
+    decimals = tickStr.split('.')[1].length;
+  }
+
   return parseFloat(rounded.toFixed(decimals));
 }
 

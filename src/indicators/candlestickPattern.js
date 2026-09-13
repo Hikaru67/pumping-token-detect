@@ -1,5 +1,4 @@
 import { fetchKlineData } from '../api/apiClient.js';
-import { getRSIStatus } from './rsiCalculator.js';
 import { config } from '../config.js';
 
 /**
@@ -28,7 +27,7 @@ function isHammer(open, close, high, low) {
   return isRegularHammer || isInvertedHammer;
 }
 
-  
+
 /**
  * Kiểm tra nến có phải là Doji - tín hiệu đảo chiều
  * Doji: mở và đóng gần bằng nhau (thân rất nhỏ)
@@ -66,9 +65,9 @@ function isBullishEngulfing(candles) {
   // Nến hiện tại là xanh (tăng)
   // Nến xanh nhấn chìm hoàn toàn nến đỏ
   return prevClose < prevOpen && // Nến trước đỏ
-         currClose > currOpen && // Nến hiện tại xanh
-         currOpen < prevClose && // Mở thấp hơn đóng của nến trước
-         currClose > prevOpen;   // Đóng cao hơn mở của nến trước
+    currClose > currOpen && // Nến hiện tại xanh
+    currOpen < prevClose && // Mở thấp hơn đóng của nến trước
+    currClose > prevOpen;   // Đóng cao hơn mở của nến trước
 }
 
 /**
@@ -112,7 +111,7 @@ async function checkReversalSignalForTimeframe(symbol, timeframe) {
   try {
     // Lấy dữ liệu kline để kiểm tra pattern
     const klineData = await fetchKlineData(symbol, timeframe, 10); // Chỉ cần 10 nến gần nhất
-    
+
     if (!klineData || !klineData.close || !Array.isArray(klineData.close) || klineData.close.length < 2) {
       return {
         timeframe,
@@ -126,7 +125,7 @@ async function checkReversalSignalForTimeframe(symbol, timeframe) {
     const length = klineData.close.length;
     // Chỉ lấy từ nến đầu tiên đến nến áp chót (bỏ nến cuối cùng)
     const closedCandlesCount = length > 1 ? length - 1 : length;
-    
+
     for (let i = 0; i < closedCandlesCount; i++) {
       candles.push({
         open: klineData.open[i],
@@ -138,7 +137,7 @@ async function checkReversalSignalForTimeframe(symbol, timeframe) {
 
     // Kiểm tra tín hiệu đảo chiều (chỉ dùng nến đã đóng)
     const hasSignal = candles.length >= 2 && hasReversalSignal(candles);
-    
+
     return {
       timeframe,
       hasSignal,
@@ -161,15 +160,15 @@ async function checkReversalSignalForTimeframe(symbol, timeframe) {
  */
 async function processReversalSignalBatch(timeframes, symbol, maxConcurrent) {
   const results = [];
-  
+
   // Xử lý từng batch
   for (let i = 0; i < timeframes.length; i += maxConcurrent) {
     const batch = timeframes.slice(i, i + maxConcurrent);
-    
+
     // Check song song trong batch
     const batchPromises = batch.map(tf => checkReversalSignalForTimeframe(symbol, tf));
     const batchResults = await Promise.allSettled(batchPromises);
-    
+
     // Xử lý kết quả batch
     for (let j = 0; j < batchResults.length; j++) {
       const result = batchResults[j];
@@ -184,7 +183,7 @@ async function processReversalSignalBatch(timeframes, symbol, maxConcurrent) {
       }
     }
   }
-  
+
   return results;
 }
 
@@ -209,7 +208,7 @@ export async function checkReversalSignal(token, timeframes = ['Min5', 'Min15', 
   // Kiểm tra song song cho các timeframes (với giới hạn concurrent)
   const maxConcurrent = config.rsiMaxConcurrentTimeframes; // Dùng cùng config với RSI
   const results = await processReversalSignalBatch(timeframes, token.symbol, maxConcurrent);
-  
+
   // Lọc các timeframes có signal
   const signalTimeframes = results
     .filter(r => r.hasSignal)

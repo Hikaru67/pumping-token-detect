@@ -283,7 +283,7 @@ export function countRSIOverboughtOversold(rsiData) {
   Object.entries(rsiData).forEach(([timeframe, rsi]) => {
     if (rsi !== null && !isNaN(rsi)) {
       const status = getRSIStatus(rsi, timeframe);
-      if (status === 'overbought') {
+      if (status === 'overbought' || status === 'superOverbought') {
         overboughtCount++;
       } else if (status === 'oversold') {
         oversoldCount++;
@@ -339,7 +339,7 @@ export function getOverboughtTimeframes(rsiData, targetTimeframes = null) {
     const rsi = rsiData[tf];
     if (rsi !== null && !isNaN(rsi)) {
       const status = getRSIStatus(rsi, tf);
-      if (status === 'overbought') {
+      if (status === 'overbought' || status === 'superOverbought') {
         overboughtTimeframes.push(tf);
       }
     }
