@@ -42,6 +42,11 @@ export const config = {
     ? parseInt(process.env.TELEGRAM_AUTO_TRADE_TOPIC_ID, 10)
     : null, // Topic ID cho auto trade alerts (khi vào lệnh được trigger) - dùng chung group với TELEGRAM_GROUP_ID
 
+  // Telegram Wyckoff Signals (thông báo khi phát hiện mô hình Wyckoff Re-accumulation)
+  telegramWyckoffTopicId: process.env.TELEGRAM_WYCKOFF_TOPIC_ID && process.env.TELEGRAM_WYCKOFF_TOPIC_ID.trim() !== ''
+    ? parseInt(process.env.TELEGRAM_WYCKOFF_TOPIC_ID, 10)
+    : null, // Topic ID cho Wyckoff Re-accumulation alerts (Long thuận xu hướng)
+
   // Telegram Strategy Checking Log (thông báo khi check strategy)
   telegramStrategyCheckingLogTopicId: process.env.TELEGRAM_STRATEGY_CHECKING_LOG_TOPIC_ID && process.env.TELEGRAM_STRATEGY_CHECKING_LOG_TOPIC_ID.trim() !== ''
     ? parseInt(process.env.TELEGRAM_STRATEGY_CHECKING_LOG_TOPIC_ID, 10)
