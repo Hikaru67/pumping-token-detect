@@ -32,7 +32,7 @@ jobs:
             cd /root/pumping-token-detect || exit 1
 
             # 2. Sử dụng đường dẫn tuyệt đối của PM2
-            PM2_CMD="/root/.nvm/versions/node/v23.11.1/bin/pm2"
+            PM2_CMD="/root/.nvm/versions/node/v24.21.0/bin/pm2"
 
             # 3. CẬP NHẬT CODE (Bỏ comment nếu bạn cần cập nhật code bằng git)
             git pull origin master
