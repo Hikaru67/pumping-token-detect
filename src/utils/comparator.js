@@ -196,8 +196,9 @@ export function detectRSIConfluenceIncrease(currentTop10, previousData, isPumpAl
       // Pump: cần ít nhất 2 RSI quá bán (oversold)
       hasMinRSI = currentConfluence.status === 'oversold' && currentCount >= 2;
     } else {
-      // Drop: cần ít nhất 2 RSI quá mua (overbought)
-      hasMinRSI = currentConfluence.status === 'overbought' && currentCount >= 2;
+      // Drop: cần ít nhất 2 RSI quá mua (overbought hoặc superOverbought)
+      const isOverboughtGroup = currentConfluence.status === 'overbought' || currentConfluence.status === 'superOverbought';
+      hasMinRSI = isOverboughtGroup && currentCount >= 2;
     }
 
     // Alert nếu thỏa một trong hai điều kiện

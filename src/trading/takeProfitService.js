@@ -4,6 +4,7 @@ import {
   getBingxOpenOrders,
   cancelAllBingxOrders,
   getSymbolTickSize,
+  getBingxUSDTBalance,
 } from '../api/bingxService.js';
 import { config } from '../config.js';
 import { getBaseSymbol } from '../utils/symbolUtils.js';
@@ -11,6 +12,7 @@ import {
   sendTakeProfitNotification,
   sendBreakevenSLNotification,
   sendTakeProfitFilledNotification,
+  sendSLHitNotification,
 } from '../telegram/telegramBot.js';
 
 /**
@@ -51,7 +53,14 @@ export function roundToTickSize(price, tickSize) {
   if (!tickSize || tickSize <= 0) return parseFloat(price.toFixed(8));
   const rounded = Math.round(price / tickSize) * tickSize;
   // Số chữ số thập phân của tickSize
-  const decimals = (tickSize.toString().split('.')[1] || '').length;
+  let decimals = 0;
+  const tickStr = String(tickSize);
+  if (tickStr.includes('e-')) {
+    decimals = parseInt(tickStr.split('e-')[1], 10);
+  } else if (tickStr.includes('.')) {
+    decimals = tickStr.split('.')[1].length;
+  }
+
   return parseFloat(rounded.toFixed(decimals));
 }
 
@@ -116,10 +125,15 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
   const { tp1Price, tp2Price, tp3Price } = calculateTPLevels(avgEntryPrice, pumpPercent, tickSize);
   const { qty1, qty2, qty3 } = calculateTPQuantities(totalQty);
 
+  const balance = await getBingxUSDTBalance();
+  const pnlPercent1 = balance > 0 ? (((avgEntryPrice - tp1Price) * qty1) / balance) * 100 : 0;
+  const pnlPercent2 = balance > 0 ? (((avgEntryPrice - tp2Price) * qty2) / balance) * 100 : 0;
+  const pnlPercent3 = balance > 0 ? (((avgEntryPrice - tp3Price) * qty3) / balance) * 100 : 0;
+
   console.log(`\n📐 [${symbol}] Tính mức TP (pump ${(pumpPercent * 100).toFixed(1)}%, entry ${avgEntryPrice}):`);
-  console.log(`   TP1: ${(config.tpClosePercent1)}% qty (${qty1}) @ ${tp1Price} (profit ${(dropRatio1 * 100).toFixed(2)}%)`);
-  console.log(`   TP2: ${(config.tpClosePercent2)}% qty (${qty2}) @ ${tp2Price} (profit ${(dropRatio2 * 100).toFixed(2)}%)`);
-  console.log(`   TP3: ${(config.tpClosePercent3)}% qty (${qty3}) @ ${tp3Price} (profit ${(dropRatio3 * 100).toFixed(2)}%)`);
+  console.log(`   TP1: ${(config.tpClosePercent1)}% qty (${qty1}) @ ${tp1Price} (profit ${(dropRatio1 * 100).toFixed(2)}% | PNL ~${pnlPercent1.toFixed(2)}%)`);
+  console.log(`   TP2: ${(config.tpClosePercent2)}% qty (${qty2}) @ ${tp2Price} (profit ${(dropRatio2 * 100).toFixed(2)}% | PNL ~${pnlPercent2.toFixed(2)}%)`);
+  console.log(`   TP3: ${(config.tpClosePercent3)}% qty (${qty3}) @ ${tp3Price} (profit ${(dropRatio3 * 100).toFixed(2)}% | PNL ~${pnlPercent3.toFixed(2)}%)`);
 
   const levels = [
     { level: 1, price: tp1Price, qty: qty1 },
@@ -162,6 +176,9 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
     tp1Price,
     tp2Price,
     tp3Price,
+    tp1Qty: qty1,
+    tp2Qty: qty2,
+    tp3Qty: qty3,
     tp1Filled: false,
     tp2Filled: false,
     tp3Filled: false,
@@ -176,9 +193,9 @@ export async function placeTakeProfitOrders(symbol, avgEntryPrice, totalQty, pum
     pumpPercent,
     totalQty,
     levels: [
-      { level: 1, price: tp1Price, qty: qty1, profitPercent: dropRatio1 * 100 },
-      { level: 2, price: tp2Price, qty: qty2, profitPercent: dropRatio2 * 100 },
-      { level: 3, price: tp3Price, qty: qty3, profitPercent: dropRatio3 * 100 },
+      { level: 1, price: tp1Price, qty: qty1, profitPercent: dropRatio1 * 100, accountPnlPercent: pnlPercent1 },
+      { level: 2, price: tp2Price, qty: qty2, profitPercent: dropRatio2 * 100, accountPnlPercent: pnlPercent2 },
+      { level: 3, price: tp3Price, qty: qty3, profitPercent: dropRatio3 * 100, accountPnlPercent: pnlPercent3 },
     ],
     isUpdate: false,
   }).catch(err => console.warn(`⚠️  [${symbol}] Lỗi gửi Telegram TP:`, err.message));
@@ -377,12 +394,30 @@ export async function checkTPState() {
               console.log(`   ✅ [${baseSymbol}] Lệnh TP${level} đã khớp hoàn toàn (FILLED)!`);
               state[filledKey] = true;
 
+              // Calculate PNL
+              let accountPnlPercent = null;
+              try {
+                const { getBingxUSDTBalance } = await import('../api/bingxService.js');
+                const balance = await getBingxUSDTBalance();
+                if (balance > 0) {
+                  const qty = state[`tp${level}Qty`];
+                  const entryPrice = state.avgEntryPrice;
+                  const tpPrice = state[priceKey];
+                  if (qty && entryPrice && tpPrice) {
+                    accountPnlPercent = (((entryPrice - tpPrice) * qty) / balance) * 100;
+                  }
+                }
+              } catch (err) {
+                console.warn(`   ⚠️  [${baseSymbol}] Lỗi tính PNL TP${level} filled:`, err.message);
+              }
+
               // Gửi báo cáo TP khớp qua vi-VN Telegram
               sendTakeProfitFilledNotification({
                 symbol: baseSymbol,
                 level,
                 tpOrderId,
-                price: state[priceKey]
+                price: state[priceKey],
+                accountPnlPercent
               }).catch(err => console.warn(`⚠️ Lỗi gửi Telegram TP${level} filled:`, err.message));
 
               // Nếu là TP1 => trigger S/L
@@ -391,7 +426,7 @@ export async function checkTPState() {
               }
             }
           } else {
-             console.log(`   ⏳ [${baseSymbol}] TP${level} chưa khớp (còn trong open orders)`);
+            console.log(`   ⏳ [${baseSymbol}] TP${level} chưa khớp (còn trong open orders)`);
           }
         }
       }
@@ -408,7 +443,20 @@ export async function checkTPState() {
       const allTpFilled = state.tp1Filled && state.tp2Filled && state.tp3Filled;
 
       if (!stillOpen || allTpFilled) {
-        console.log(`   ℹ️  [${baseSymbol}] Position đã đóng hoàn toàn hoặc All TPs Filled, cleanup TP state`);
+        if (!stillOpen) {
+          if (state.slPlaced && state.slOrderId) {
+            console.log(`   🚨 [${baseSymbol}] Lệnh đã tự động đóng do khớp SL entry hoặc đóng tay | OrderID: ${state.slOrderId}`);
+            sendSLHitNotification({
+              symbol: state.symbol,
+              entryPrice: state.avgEntryPrice,
+              slOrderId: state.slOrderId
+            }).catch(err => console.warn(`⚠️ Lỗi gửi Telegram SL hit:`, err.message));
+          } else {
+            console.log(`   ℹ️  [${baseSymbol}] Vị thế đã đóng hoàn toàn (đóng tay hoặc cán SL mặc định)`);
+          }
+        } else {
+          console.log(`   ℹ️  [${baseSymbol}] Tất cả TP đã khớp (All TPs Filled), cleanup TP state`);
+        }
         tpStateMap.delete(baseSymbol);
       }
 

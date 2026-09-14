@@ -39,6 +39,6 @@ startTakeProfitScheduler();
 // startDropScheduler();
 
 console.log('='.repeat(60));
-console.log('✅ Tất cả schedulers đã được khởi động');
+console.log('✅ Tất cả schedulers và listeners đã được khởi động');
 console.log('='.repeat(60));
 

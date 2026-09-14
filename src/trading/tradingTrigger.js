@@ -16,6 +16,17 @@ import { placeTakeProfitOrders, updateTakeProfitOrders, getTPState } from './tak
 // Lưu trữ các lệnh đã vào để tránh vào lệnh trùng lặp
 const executedOrders = new Map(); // key: symbol, value: { timestamp, strategy, volume }
 
+// Dọn dẹp các lệnh cũ mỗi giờ để tránh memory leak
+setInterval(() => {
+  const oneHourAgo = Date.now() - 60 * 60 * 1000;
+  for (const [symbol, order] of executedOrders.entries()) {
+    if (order.timestamp < oneHourAgo) {
+      executedOrders.delete(symbol);
+    }
+  }
+}, 60 * 60 * 1000);
+
+
 /**
  * Kiểm tra xem đã vào lệnh cho symbol này chưa (trong vòng 1 giờ cho cùng 1 chiến thuật)
  * @param {string} symbol - Symbol
@@ -101,25 +112,14 @@ export async function checkAndExecuteTrade(token) {
 
   console.log(`\n🔍 [${token.symbol}] Kiểm tra trading trigger (${superOverboughtCount} RSI super overbought)...`);
 
-  // Kiểm tra giá pump có đạt ngưỡng tối thiểu không (rule toàn cục)
-  const pumpPercent = token.riseFallRate ? (token.riseFallRate * 100) : 0;
-  if (pumpPercent < config.tradingPumpThreshold) {
-    console.log(`   ⏭️  [${token.symbol}] Bỏ qua: Biên độ dao động giá (${pumpPercent.toFixed(2)}%) < ngưỡng quy định toàn cục (${config.tradingPumpThreshold}%)`);
-    return {
-      executed: false,
-      reason: `Biên độ giá (${pumpPercent.toFixed(2)}%) < ${config.tradingPumpThreshold}%`,
-      orderResult: null,
-    };
-  }
-
   // Kiểm tra các chiến thuật trước (để lấy strategy id)
   const strategyResult = await checkAllStrategies(token);
 
   if (!strategyResult.strategy) {
-    console.log(`   ⏭️  [${token.symbol}] Không có chiến thuật nào thỏa mãn: ${strategyResult.result.reason}`);
+    console.log(`   ⏭️  [${token.symbol}] Không có chiến thuật nào thỏa mãn: ${strategyResult.result?.reason}`);
     return {
       executed: false,
-      reason: strategyResult.result.reason,
+      reason: strategyResult.result?.reason,
       orderResult: null,
     };
   }
@@ -173,14 +173,15 @@ export async function checkAndExecuteTrade(token) {
 
   // Lấy giá hiện tại (nến M1 mới nhất) thao tác kiểm tra giá xả và chuẩn bị convert size lệnh ra Token
   let currentExecutionPrice = token.lastPrice;
-  
+
   try {
     const currentKline = await fetchKlineData(token.symbol, 'Min1', 2);
     if (currentKline && currentKline.close && currentKline.close.length > 0) {
       const currentPriceStr = currentKline.close[currentKline.close.length - 1];
       const currentPrice = parseFloat(currentPriceStr);
-      
+
       if (!isNaN(currentPrice) && token.lastPrice) {
+        const pumpPercent = (token.riseFallRate * 100).toFixed(2);
         currentExecutionPrice = currentPrice;
         // dropPercent: Tính tỷ lệ giá rơi từ token.lastPrice xuống currentPrice 
         const dropPercent = ((token.lastPrice - currentPrice) / token.lastPrice) * 100;
@@ -206,7 +207,7 @@ export async function checkAndExecuteTrade(token) {
             fundingRate: preTradeCheck.fundingRate,
           };
         }
-        
+
         console.log(`   ✅ [${token.symbol}] Chênh lệch giá an toàn: xả ${dropPercent.toFixed(2)}%, pump ${pumpPercent.toFixed(2)}%, ratio ${dropPumpRatio.toFixed(3)} < ${dropPumpRatioThreshold} (M1: ${currentPrice}, Khởi điểm: ${token.lastPrice})`);
       }
     }
@@ -295,7 +296,7 @@ export async function checkAndExecuteTrade(token) {
   // Chuyển đổi Volume (USDT Notional Value) sang Quantity (Lượng Token) để gọi API BingX
   // Quantity = (Margin * Leverage) / Khớp Giá Hiện Tại
   let finalTokenQuantity = finalEntryVolume / currentExecutionPrice;
-  
+
   // Làm tròn để tránh API từ chối do quá nhiều số thập phân
   if (finalTokenQuantity > 100) {
     finalTokenQuantity = Math.floor(finalTokenQuantity);

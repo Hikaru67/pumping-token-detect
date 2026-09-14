@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { config } from '../config.js';
-import { formatTimeframe, getRSIStatus } from '../indicators/rsiCalculator.js';
+import { formatTimeframe } from '../indicators/rsiCalculator.js';
 import { checkReversalSignal } from '../indicators/candlestickPattern.js';
 import { checkBinanceFuturesSymbol } from '../api/binanceService.js';
+import { TokenWrapper } from '../models/TokenWrapper.js';
 
 /**
  * Bỏ đuôi _USDT hoặc _USDC trong symbol
@@ -106,21 +107,10 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
         });
 
         // Tạo chuỗi RSI cho các timeframes với format ngắn gọn
+        const wrappedToken = new TokenWrapper(token);
         const rsiStrings = rsiEntries.map(([timeframe, rsi]) => {
           const formattedTF = formatTimeframe(timeframe);
-          const status = getRSIStatus(rsi, timeframe);
-          let emoji = '⚪️'; // neutral
-          let rsiValue = rsi.toFixed(1);
-
-          if (status === 'oversold') {
-            emoji = '🟢'; // oversold (có thể mua vào)
-            rsiValue = `*${rsiValue}*`; // Bold cho oversold
-          } else if (status === 'overbought') {
-            emoji = '🔴'; // overbought (có thể bán ra)
-            rsiValue = `*${rsiValue}*`; // Bold cho overbought
-          }
-
-          return `${formattedTF}${emoji}${rsiValue}`;
+          return `${formattedTF}${wrappedToken.formatRSIDisplay(timeframe)}`;
         });
 
         message += `📊 RSI: ${rsiStrings.join(' • ')}\n`;
@@ -249,34 +239,18 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
         });
 
         // Tạo chuỗi RSI cho các timeframes với format đẹp hơn
+        const wrappedToken = new TokenWrapper(token);
         const rsiStrings = rsiEntries.map(([timeframe, rsi]) => {
           const formattedTF = formatTimeframe(timeframe);
-          const status = getRSIStatus(rsi, timeframe);
-          let emoji = '⚪'; // neutral
-          let rsiValue = rsi.toFixed(1);
-
-          if (status === 'oversold') {
-            emoji = '🟢'; // oversold (có thể mua vào)
-            rsiValue = `*${rsiValue}*`; // Bold cho oversold
-          } else if (status === 'overbought') {
-            emoji = '🔴'; // overbought (có thể bán ra)
-            rsiValue = `*${rsiValue}*`; // Bold cho overbought
-          }
-
-          return `${formattedTF}${emoji}${rsiValue}`;
+          return `${formattedTF}${wrappedToken.formatRSIDisplay(timeframe)}`;
         });
 
         message += `📊 RSI: ${rsiStrings.join(' • ')}\n`;
 
         // Hiển thị confluence nếu có (nổi bật hơn)
-        if (token.rsiConfluence && token.rsiConfluence.hasConfluence) {
-          const confluenceEmoji = token.rsiConfluence.status === 'oversold' ? '🟢' : '🔴';
-          const confluenceText = token.rsiConfluence.status === 'oversold'
-            ? 'OVERSOLD CONFLUENCE ⬆️'
-            : 'OVERBOUGHT CONFLUENCE ⬇️';
-          const timeframesList = token.rsiConfluence.timeframes.map(tf => formatTimeframe(tf)).join(', ');
-
-          message += `   ${confluenceEmoji} *${confluenceText}* (${token.rsiConfluence.count} TFs: ${timeframesList})\n`;
+        const confluenceLine = wrappedToken.formatConfluenceDisplay();
+        if (confluenceLine) {
+          message += `   ${confluenceLine}\n`;
         }
       } else {
         // Nếu không có RSI data, thông báo
@@ -336,6 +310,7 @@ function formatSignalAlertMessage(signalTokens) {
     const cleanSymbolName = escapeMarkdown(cleanSymbol(token.symbol));
     const riseFallPercent = (token.riseFallRate * 100).toFixed(2);
     const sign = token.riseFallRate >= 0 ? '+' : '';
+    const wrappedToken = new TokenWrapper(token);
 
     message += `*${index + 1}. $${cleanSymbolName}*\n`;
     message += `   Biến động: *${sign}${riseFallPercent}%*\n`;
@@ -345,7 +320,7 @@ function formatSignalAlertMessage(signalTokens) {
       const rsi = token.rsi[tf];
       if (rsi === null || rsi === undefined || isNaN(rsi)) return null;
       const formattedTF = formatTimeframe(tf);
-      return `${formattedTF}🟢*${rsi.toFixed(1)}*`;
+      return `${formattedTF}${wrappedToken.formatRSIDisplay(tf)}`;
     }).filter(Boolean);
 
     if (rsiStrings.length > 0) {
@@ -389,6 +364,7 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
   }
 
   const cleanSymbolName = cleanSymbol(token.symbol);
+  const wrappedToken = new TokenWrapper(token);
   const timestamp = new Date().toLocaleString('vi-VN', {
     timeZone: 'Asia/Ho_Chi_Minh',
     year: 'numeric',
@@ -403,10 +379,11 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
 
   // Highlight nếu có 3+ RSI >= SUPER_OVER_BOUGHT
   if (hasSuperOverbought) {
-    const superOverboughtCount = metadata?.superOverboughtCount || 0;
-    // Từ 4 RSI super overbought trở lên thì thêm số sao tương ứng
-    const stars = superOverboughtCount >= 4 ? '⭐'.repeat(superOverboughtCount) : '';
-    message += `🔥 *⚡ SUPER OVERBOUGHT ⚡${stars}*\n`;
+    const superOverboughtCount = metadata?.superOverboughtCount || wrappedToken.getSuperOverboughtCount();
+    const rsiTotal = wrappedToken.getTotalTimeframesCount();
+    // Từ 4 RSI super overbought trở lên thì thêm số sao tương ứng, vd: 5/7⭐
+    const stars = superOverboughtCount >= 4 ? ` ${superOverboughtCount}/${rsiTotal}⭐` : '';
+    message += `🔥 *⚡ ${cleanSymbolName} ⚡${stars}*\n`;
   }
 
   // Hiển thị tên symbol với điểm bên phải nếu có
@@ -432,38 +409,22 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
       // Tạo chuỗi RSI cho các timeframes với format đẹp hơn
       const rsiStrings = rsiEntries.map(([timeframe, rsi]) => {
         const formattedTF = formatTimeframe(timeframe);
-        const status = getRSIStatus(rsi, timeframe);
-        let emoji = '⚪'; // neutral
-        let rsiValue = rsi.toFixed(1);
-
+        
         // Đánh dấu các timeframes có signal
         const hasSignal = signalTimeframes.includes(timeframe);
-
-        if (status === 'oversold') {
-          emoji = '🟢'; // oversold (có thể mua vào)
-          rsiValue = `*${rsiValue}*`; // Bold cho oversold
-        } else if (status === 'overbought') {
-          emoji = '🔴'; // overbought (có thể bán ra)
-          rsiValue = `*${rsiValue}*`; // Bold cho overbought
-        }
-
+        
         // Thêm dấu hiệu nếu có signal đảo chiều
         const signalMark = hasSignal ? '🔄' : '';
 
-        return `${formattedTF}${emoji}${rsiValue}${signalMark}`;
+        return `${formattedTF}${wrappedToken.formatRSIDisplay(timeframe)}${signalMark}`;
       });
 
       message += `📊 RSI: ${rsiStrings.join(' • ')}\n`;
 
       // Hiển thị confluence nếu có
-      if (token.rsiConfluence && token.rsiConfluence.hasConfluence) {
-        const confluenceEmoji = token.rsiConfluence.status === 'oversold' ? '🟢' : '🔴';
-        const confluenceText = token.rsiConfluence.status === 'oversold'
-          ? 'OVERSOLD CONFLUENCE ⬆️'
-          : 'OVERBOUGHT CONFLUENCE ⬇️';
-        const timeframesList = token.rsiConfluence.timeframes.map(tf => formatTimeframe(tf)).join(', ');
-
-        message += `${confluenceEmoji} *${confluenceText}* (${token.rsiConfluence.count} TFs: ${timeframesList})\n\n`;
+      const confluenceLine = wrappedToken.formatConfluenceDisplay();
+      if (confluenceLine) {
+        message += `${confluenceLine}\n\n`;
       }
 
       if (scoreInfo && scoreInfo.components) {
@@ -955,8 +916,7 @@ function formatAutoTradeMessage(tradeResult, token) {
   const pumpPercent = (token.riseFallRate * 100).toFixed(2);
   const sign = token.riseFallRate >= 0 ? '+' : '';
 
-  let message = `🎯 *VÀO LỆNH TỰ ĐỘNG*\n\n`;
-  message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+  let message = `🎯 $${cleanSymbolName} *VÀO LỆNH TỰ ĐỘNG*\n\n`;
   message += `📊 *Chiến thuật:* ${tradeResult.strategy}\n`;
   message += `📈 *Pump:* ${sign}${pumpPercent}%\n`;
   message += `💵 *Volume:* ${tradeResult.volume?.toFixed(8) || 'N/A'}\n`;
@@ -1106,16 +1066,19 @@ function formatTakeProfitMessage(tpData) {
   });
 
   const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
-  const action = isUpdate ? '🔄 *CẬP NHẬT TP* \\(nhồi lệnh\\)' : '🎯 *ĐẶT TAKE PROFIT*';
+  const action = isUpdate ? `🔄 $${cleanSymbolName} *CẬP NHẬT TP* \\(nhồi lệnh\\)` : `🎯 $${cleanSymbolName} *ĐẶT TAKE PROFIT*`;
 
   let message = `${action}\n\n`;
-  message += `💰 *Symbol:* $${cleanSymbolName}\n`;
   message += `📍 *Avg Entry:* ${avgEntryPrice}\n`;
   message += `📈 *Pump:* \\+${(pumpPercent * 100).toFixed(1)}%\n`;
   message += `📦 *Tổng qty:* ${totalQty}\n\n`;
   message += `📊 *Các mức Take Profit:*\n`;
-  levels.forEach(({ level, price, qty, profitPercent }) => {
-    message += `   TP${level}: @ ${price} \\| ${qty} qty \\| profit ~${profitPercent.toFixed(1)}%\n`;
+  levels.forEach(({ level, price, qty, profitPercent, accountPnlPercent }) => {
+    let pnlText = ``;
+    if (accountPnlPercent !== undefined) {
+      pnlText = ` \\| PNL ~${accountPnlPercent.toFixed(2)}%\n`;
+    }
+    message += `   TP${level}: @ ${price} \\| ${qty} qty \\| profit ~${profitPercent.toFixed(1)}%${pnlText}\n`;
   });
   message += `\n⏰ ${timestamp}`;
   return message;
@@ -1166,8 +1129,7 @@ export async function sendBreakevenSLNotification(data) {
     });
 
     const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
-    let message = `🛡️ *SL KÉO VỀ BREAKEVEN*\n\n`;
-    message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+    let message = `🛡️ *$${cleanSymbolName} SL KÉO VỀ BREAKEVEN*\n\n`;
     message += `✅ *TP1 đã khớp\\!* Kéo SL về entry price\n`;
     message += `📍 *SL Price:* ${entryPrice} \\(entry\\)\n`;
     message += `📦 *Qty còn lại:* ${remainingQty}\n`;
@@ -1210,11 +1172,13 @@ export async function sendTakeProfitFilledNotification(data) {
     });
 
     const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
-    let message = `🎯 *TAKE PROFIT ${level} KHỚP*\n\n`;
-    message += `💰 *Symbol:* $${cleanSymbolName}\n`;
+    let message = `🎯 *$${cleanSymbolName} TAKE PROFIT ${level} KHỚP*\n\n`;
     message += `✅ *Chúc mừng:* TP${level} của mã này đã được chốt hoàn toàn\\!\n`;
     if (price) {
       message += `📍 *Giá khớp:* ${price}\n`;
+    }
+    if (data.accountPnlPercent !== undefined && data.accountPnlPercent !== null) {
+      message += `📈 *PNL:* ~${data.accountPnlPercent.toFixed(2)}%\n`;
     }
     if (tpOrderId) {
       message += `🆔 *Order ID:* ${escapeMarkdown(String(tpOrderId))}\n`;
@@ -1233,6 +1197,50 @@ export async function sendTakeProfitFilledNotification(data) {
     return success;
   } catch (error) {
     console.error(`❌ Lỗi khi gửi Telegram TP${data.level} filled notification:`, error.message);
+    return false;
+  }
+}
+
+/**
+ * Gửi thông báo khi SL entry (breakeven) bị cán (hit)
+ * @param {Object} data - { symbol, entryPrice, slOrderId }
+ * @returns {Promise<boolean>}
+ */
+export async function sendSLHitNotification(data) {
+  if (!config.telegramBotToken || !config.telegramGroupId || !config.telegramAutoTradeTopicId) {
+    return false;
+  }
+  try {
+    const { symbol, entryPrice, slOrderId } = data;
+    const timestamp = new Date().toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+
+    const cleanSymbolName = escapeMarkdown(cleanSymbol(symbol));
+    let message = `🚨 *$${cleanSymbolName} CÁN SL BREAKEVEN (ENTRY)*\n\n`;
+    message += `⚠️ Vị thế đã tự động đóng tại giá Entry do chạm Stop Loss hòa vốn\\.\n`;
+    if (entryPrice) {
+      message += `📍 *SL Price:* ${entryPrice} \\(entry\\)\n`;
+    }
+    if (slOrderId) {
+      message += `🆔 *SL Order ID:* ${escapeMarkdown(String(slOrderId))}\n`;
+    }
+    message += `\n⏰ ${timestamp}`;
+
+    const success = await sendToTelegramChat(
+      config.telegramGroupId,
+      message,
+      config.telegramAutoTradeTopicId,
+      false
+    );
+    if (success) {
+      console.log(`✅ Đã gửi thông báo cán SL cho ${symbol}`);
+    }
+    return success;
+  } catch (error) {
+    console.error('❌ Lỗi khi gửi Telegram SL hit notification:', error.message);
     return false;
   }
 }

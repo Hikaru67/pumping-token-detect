@@ -77,7 +77,9 @@ export function getRSIStatus(rsi, timeframe = null) {
     ? config.rsiOverboughtThresholdSmall 
     : config.rsiOverboughtThreshold;
   
-  if (rsi > overboughtThreshold) {
+  if (rsi >= config.rsiSuperOverboughtThreshold) {
+    return 'superOverbought';
+  } else if (rsi >= overboughtThreshold) {
     return 'overbought';
   } else {
     return 'neutral';
@@ -103,6 +105,7 @@ export function checkRSIConfluence(rsiData) {
   const statusCounts = {
     oversold: [],
     overbought: [],
+    superOverbought: [],
     neutral: [],
   };
 
@@ -112,6 +115,9 @@ export function checkRSIConfluence(rsiData) {
       statusCounts[status].push(timeframe);
     }
   });
+
+  // Gộp superOverbought vào overbought để tính confluence
+  const allOverbought = [...statusCounts.overbought, ...statusCounts.superOverbought];
 
   // Kiểm tra confluence: ít nhất minTimeframes timeframes có cùng trạng thái
   const minTimeframes = config.rsiConfluenceMinTimeframes;
@@ -125,14 +131,25 @@ export function checkRSIConfluence(rsiData) {
       rsiValues: statusCounts.oversold.map(tf => ({ timeframe: tf, rsi: rsiData[tf] })),
     };
   }
+
+  // Ưu tiên hiển thị superOverbought nếu đủ số lượng
+  if (statusCounts.superOverbought.length >= minTimeframes) {
+    return {
+      hasConfluence: true,
+      status: 'superOverbought',
+      timeframes: allOverbought,
+      count: allOverbought.length,
+      rsiValues: allOverbought.map(tf => ({ timeframe: tf, rsi: rsiData[tf] })),
+    };
+  }
   
-  if (statusCounts.overbought.length >= minTimeframes) {
+  if (allOverbought.length >= minTimeframes) {
     return {
       hasConfluence: true,
       status: 'overbought',
-      timeframes: statusCounts.overbought,
-      count: statusCounts.overbought.length,
-      rsiValues: statusCounts.overbought.map(tf => ({ timeframe: tf, rsi: rsiData[tf] })),
+      timeframes: allOverbought,
+      count: allOverbought.length,
+      rsiValues: allOverbought.map(tf => ({ timeframe: tf, rsi: rsiData[tf] })),
     };
   }
 
