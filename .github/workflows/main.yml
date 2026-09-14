@@ -1,0 +1,13 @@
+TARGET_APPS="${{ secrets.PM2_APP_NAME || 'pump-token-alert' }}"
+
+for app in $TARGET_APPS; do
+  if pm2 describe "$app" > /dev/null 2>&1; then
+    echo "⚡ Đang reload app: $app"
+    pm2 reload "$app" --update-env
+  else
+    echo "⚠️ App '$app' hiện chưa chạy trong PM2. Đang kiểm tra để khởi động..."
+    if [ "$app" = "pump-token-alert" ] || [ "$app" = "main" ]; then
+      pm2 start main.js --name "$app"
+    fi
+  fi
+done
