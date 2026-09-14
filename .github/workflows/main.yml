@@ -1,21 +1,54 @@
-- name: Deploy and Reload PM2
-  # Cấu hình biến môi trường an toàn tại step này
-  env:
-    SECRET_APP_NAME: ${{ secrets.PM2_APP_NAME }}
-  # BẮT BUỘC phải có dấu | ở đây để chạy script nhiều dòng
-  run: |
-    # Fallback về 'pump-token-alert' nếu secret bị rỗng
-    TARGET_APPS="${SECRET_APP_NAME:-pump-token-alert}"
-  
-    for app in $TARGET_APPS; do
-      if pm2 describe "$app" > /dev/null 2>&1; then
-        echo "⚡ Đang reload app: $app"
-        pm2 reload "$app" --update-env
-      else
-        echo "⚠️ App '$app' hiện chưa chạy trong PM2. Đang khởi động..."
-        if [ "$app" = "pump-token-alert" ] || [ "$app" = "main" ]; then
-          pm2 start main.js --name "$app"
-          pm2 save
-        fi
-      fi
-    done
+name: Deploy to VPS via SSH
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # (Tùy chọn) Thêm bước copy code từ GitHub sang VPS ở đây nếu bạn không dùng git pull trên VPS.
+      # Ví dụ dùng appleboy/scp-action...
+
+      - name: Deploy and Reload PM2 on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SECRET_APP_NAME: ${{ secrets.PM2_APP_NAME }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }} # Thường là 22
+          # Bắt buộc phải khai báo 'envs' để mang biến từ GitHub vào môi trường SSH
+          envs: TARGET_APP 
+          script: |
+            # 1. DI CHUYỂN VÀO THƯ MỤC CHỨA CODE TRÊN VPS CỦA BẠN (Sửa lại đường dẫn này)
+            cd /root/pumping-token-detect || exit 1
+
+            # 2. CẬP NHẬT CODE (Bỏ comment nếu bạn cần cập nhật code bằng git)
+            git pull origin master
+            npm install
+
+            # 3. CHẠY LOGIC PM2
+            TARGET_APPS="${TARGET_APP:-pump-token-alert}"
+
+            for app in $TARGET_APPS; do
+              # Tránh lỗi output từ npm/nvm làm sai lệch kết quả kiểm tra của PM2 bằng cách lấy đường dẫn tuyệt đối của pm2 nếu cần (thường pm2 describe vẫn chạy tốt)
+              if pm2 describe "$app" > /dev/null 2>&1; then
+                echo "⚡ Đang reload app: $app"
+                pm2 reload "$app" --update-env
+              else
+                echo "⚠️ App '$app' hiện chưa chạy trong PM2. Đang khởi động..."
+                if [ "$app" = "pump-token-alert" ] || [ "$app" = "main" ]; then
+                  # Vì đã cd vào đúng thư mục ở trên, nên lệnh này sẽ chạy đúng file main.js
+                  pm2 start main.js --name "$app"
+                  pm2 save
+                fi
+              fi
+            done
