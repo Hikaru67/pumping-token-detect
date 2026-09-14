@@ -1,27 +1,21 @@
-# Ưu tiên gán biến từ Environment (cài đặt trong file YAML)
-# Ví dụ trong file .yml:
-# env:
-#   SECRET_APP_NAME: ${{ secrets.PM2_APP_NAME }}
-
-# Dùng cú pháp fallback của Bash: Nếu biến rỗng thì lấy 'pump-token-alert'
-TARGET_APPS="${SECRET_APP_NAME:signal_token}"
-
-for app in $TARGET_APPS; do
-  # Kiểm tra xem app có tồn tại trong danh sách PM2 không
-  if pm2 describe "$app" > /dev/null 2>&1; then
-    echo "⚡ Đang reload app: $app"
-    pm2 reload "$app" --update-env
-  else
-    echo "⚠️ App '$app' hiện chưa chạy trong PM2. Đang kiểm tra để khởi động..."
-    
-    if [ "$app" = "pump-token-alert" ] || [ "$app" = "main" ]; then
-      pm2 start main.js --name "$app"
-      
-      # Lưu lại trạng thái pm2 để tự động chạy khi server reboot (tuỳ chọn)
-      echo "💾 Đang lưu cấu hình PM2..."
-      pm2 save
-    else
-      echo "❌ Bỏ qua: App '$app' không nằm trong danh sách được phép khởi động tự động."
-    fi
-  fi
-done
+- name: Deploy and Reload PM2
+  # Cấu hình biến môi trường an toàn tại step này
+  env:
+    SECRET_APP_NAME: ${{ secrets.PM2_APP_NAME }}
+  # BẮT BUỘC phải có dấu | ở đây để chạy script nhiều dòng
+  run: |
+    # Fallback về 'pump-token-alert' nếu secret bị rỗng
+    TARGET_APPS="${SECRET_APP_NAME:-pump-token-alert}"
+  
+    for app in $TARGET_APPS; do
+      if pm2 describe "$app" > /dev/null 2>&1; then
+        echo "⚡ Đang reload app: $app"
+        pm2 reload "$app" --update-env
+      else
+        echo "⚠️ App '$app' hiện chưa chạy trong PM2. Đang khởi động..."
+        if [ "$app" = "pump-token-alert" ] || [ "$app" = "main" ]; then
+          pm2 start main.js --name "$app"
+          pm2 save
+        fi
+      fi
+    done
