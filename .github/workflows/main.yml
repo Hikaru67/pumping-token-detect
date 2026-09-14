@@ -19,7 +19,7 @@ jobs:
       - name: Deploy and Reload PM2 on VPS
         uses: appleboy/ssh-action@v1.0.3
         env:
-          SECRET_APP_NAME: ${{ secrets.PM2_APP_NAME }}
+          TARGET_APP: ${{ secrets.TARGET_APP }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
