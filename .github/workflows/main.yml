@@ -31,24 +31,27 @@ jobs:
             # 1. DI CHUYỂN VÀO THƯ MỤC CHỨA CODE TRÊN VPS CỦA BẠN (Sửa lại đường dẫn này)
             cd /root/pumping-token-detect || exit 1
 
-            # 2. CẬP NHẬT CODE (Bỏ comment nếu bạn cần cập nhật code bằng git)
+            # 2. Sử dụng đường dẫn tuyệt đối của PM2
+            PM2_CMD="/root/.nvm/versions/node/v23.11.1/bin/pm2"
+
+            # 3. CẬP NHẬT CODE (Bỏ comment nếu bạn cần cập nhật code bằng git)
             git pull origin master
             npm install
 
-            # 3. CHẠY LOGIC PM2
+            # 4. CHẠY LOGIC PM2
             TARGET_APPS="${TARGET_APP:-pump-token-alert}"
 
             for app in $TARGET_APPS; do
               # Tránh lỗi output từ npm/nvm làm sai lệch kết quả kiểm tra của PM2 bằng cách lấy đường dẫn tuyệt đối của pm2 nếu cần (thường pm2 describe vẫn chạy tốt)
-              if pm2 describe "$app" > /dev/null 2>&1; then
+              if $PM2_CMD describe "$app" > /dev/null 2>&1; then
                 echo "⚡ Đang reload app: $app"
-                pm2 reload "$app" --update-env
+                $PM2_CMD reload "$app" --update-env
               else
                 echo "⚠️ App '$app' hiện chưa chạy trong PM2. Đang khởi động..."
                 if [ "$app" = "pump-token-alert" ] || [ "$app" = "main" ]; then
                   # Vì đã cd vào đúng thư mục ở trên, nên lệnh này sẽ chạy đúng file main.js
-                  pm2 start main.js --name "$app"
-                  pm2 save
+                  $PM2_CMD start main.js --name "$app"
+                  $PM2_CMD save
                 fi
               fi
             done
