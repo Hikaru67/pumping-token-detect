@@ -33,12 +33,16 @@ function delay(ms) {
  * @param {string} symbol - Symbol của token
  * @param {string} timeframe - Timeframe cần tính
  * @param {Array<string>} timeframeOrder - Thứ tự timeframes để biết timeframe nào lớn hơn
+ * @param {number} [livePrice] - Giá ticker hiện tại dùng cho live RSI ở nến chưa đóng
  * @returns {Promise<Object>} { timeframe, rsi: number|null, error: string|null, shouldSkipLarger: boolean }
  */
-async function calculateRSIForTimeframe(symbol, timeframe, timeframeOrder) {
+async function calculateRSIForTimeframe(symbol, timeframe, timeframeOrder, livePrice) {
   try {
     // Lấy kline data từ API
-    const klineData = await fetchKlineData(symbol, timeframe, config.rsiPeriod + 50);
+    const klineData = await fetchKlineData(symbol, timeframe, config.rsiPeriod + 50, {
+      livePrice,
+      includeLiveCandle: true,
+    });
     
     if (!klineData || !Array.isArray(klineData.close) || klineData.close.length === 0) {
       console.warn(`⚠️  Không có dữ liệu kline cho ${symbol} (${timeframe})`);
@@ -102,7 +106,7 @@ async function calculateRSIForTimeframe(symbol, timeframe, timeframeOrder) {
  * @param {number} maxConcurrent - Số lượng concurrent tối đa
  * @returns {Promise<Array>} Kết quả tính RSI cho từng timeframe
  */
-async function processTimeframesBatch(timeframes, symbol, timeframeOrder, maxConcurrent) {
+async function processTimeframesBatch(timeframes, symbol, timeframeOrder, maxConcurrent, livePrice) {
   const results = [];
   
   // Xử lý từng batch
@@ -110,7 +114,7 @@ async function processTimeframesBatch(timeframes, symbol, timeframeOrder, maxCon
     const batch = timeframes.slice(i, i + maxConcurrent);
     
     // Tính song song trong batch
-    const batchPromises = batch.map(tf => calculateRSIForTimeframe(symbol, tf, timeframeOrder));
+    const batchPromises = batch.map(tf => calculateRSIForTimeframe(symbol, tf, timeframeOrder, livePrice));
     const batchResults = await Promise.allSettled(batchPromises);
     
     // Xử lý kết quả batch
@@ -155,7 +159,7 @@ async function processTimeframesBatch(timeframes, symbol, timeframeOrder, maxCon
   return results;
 }
 
-async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
+async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes, livePrice) {
   const rsiData = {};
   const errors = [];
 
@@ -171,7 +175,7 @@ async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes) {
 
   // Tính RSI song song cho các timeframes (với giới hạn concurrent)
   const maxConcurrent = config.rsiMaxConcurrentTimeframes;
-  const results = await processTimeframesBatch(sortedTimeframes, symbol, timeframeOrder, maxConcurrent);
+  const results = await processTimeframesBatch(sortedTimeframes, symbol, timeframeOrder, maxConcurrent, livePrice);
   
   // Xử lý kết quả
   for (const result of results) {
@@ -493,11 +497,12 @@ function sortTop10ByRSI(top10, isPump = true) {
 async function calculateRSIForTokenWrapper(token, index, total) {
   try {
     console.log(`\n🔍 Đang tính RSI cho ${token.symbol} (${index + 1}/${total})...`);
-    const rsiInfo = await calculateRSIForToken(token.symbol, config.rsiTimeframes);
+    const rsiInfo = await calculateRSIForToken(token.symbol, config.rsiTimeframes, token.lastPrice);
     
     return {
       ...token,
       rsi: rsiInfo.rsiData,
+      rsiLive: Number.isFinite(Number(token.lastPrice)) && Number(token.lastPrice) > 0,
       rsiConfluence: rsiInfo.confluence,
       rsiErrors: rsiInfo.errors,
       _originalIndex: index, // Giữ index gốc để sắp xếp lại
@@ -708,4 +713,3 @@ export function getTop10DropTokens(data) {
 
   return top10WithoutRSI;
 }
-

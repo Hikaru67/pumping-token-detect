@@ -2,6 +2,7 @@ import axios from 'axios';
 import http from 'http';
 import https from 'https';
 import { config } from '../config.js';
+import { getCachedKlineData } from '../utils/klineCache.js';
 
 /**
  * Keep-alive agents để tái sử dụng TCP connection giữa các requests.
@@ -53,53 +54,34 @@ function convertIntervalForAPI(interval) {
  * @param {string} symbol - Symbol của token (ví dụ: 'BTC_USDT')
  * @param {string} interval - Khung thời gian (ví dụ: 'Min15', 'Hour1', 'Day1')
  * @param {number} limit - Số lượng candles cần lấy (mặc định: 200 để đủ tính RSI)
+ * @param {Object} [options] - Tùy chọn cache/live view; RSI có thể truyền livePrice và includeLiveCandle
  * @returns {Promise<Object>} Object chứa dữ liệu kline với format: { time, open, close, high, low, vol, amount }
  */
-export async function fetchKlineData(symbol, interval, limit = 200) {
+export async function fetchKlineData(symbol, interval, limit = 200, options = {}) {
   try {
-    // MEXC Futures API endpoint cho kline data
-    // Format: {MEXC_KLINE_API_BASE_URL}/{symbol}?interval={interval}&limit={limit}
-    // Response format: { success: true, data: { time: [...], open: [...], close: [...], high: [...], low: [...], vol: [...], amount: [...] } }
-    const url = `${config.mexcKlineApiBaseUrl}/${symbol}`;
-
-    // Chuyển đổi interval cho API (Hour1 -> Min60)
-    const apiInterval = convertIntervalForAPI(interval);
-
-    // Tính toán start time: lấy limit candles từ hiện tại về trước
-    // Mỗi interval có duration khác nhau (15m = 900s, 1h = 3600s, etc.)
-    const now = Math.floor(Date.now() / 1000);
-    const intervalSeconds = getIntervalSeconds(interval); // Vẫn dùng interval gốc để tính toán
-    const startTime = now - (limit * intervalSeconds);
-
-    const response = await axiosInstance.get(url, {
-      params: {
-        interval: apiInterval, // Dùng apiInterval đã convert
-        start: startTime,
-        end: now,
-      },
-      timeout: 15000, // Tăng timeout lên 15s vì có thể cần nhiều thời gian hơn
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.data || !response.data.success) {
-      throw new Error(`API response không hợp lệ cho ${symbol}: ${JSON.stringify(response.data)}`);
-    }
-
-    if (!response.data.data || typeof response.data.data !== 'object') {
-      throw new Error(`Dữ liệu kline từ API không hợp lệ cho ${symbol}: ${JSON.stringify(response.data.data)}`);
-    }
-
-    const data = response.data.data;
-
-    // Kiểm tra xem có close array không
-    if (!Array.isArray(data.close) || data.close.length === 0) {
-      throw new Error(`Không có dữ liệu close price cho ${symbol}`);
-    }
-
-    // MEXC kline data format: { time: [...], open: [...], close: [...], high: [...], low: [...], vol: [...], amount: [...] }
-    return data;
+    const fetchRemote = async (requestLimit) => {
+      const url = `${config.mexcKlineApiBaseUrl}/${symbol}`;
+      const apiInterval = convertIntervalForAPI(interval);
+      const now = Math.floor(Date.now() / 1000);
+      const intervalSeconds = getIntervalSeconds(interval);
+      const startTime = now - (requestLimit * intervalSeconds);
+      const response = await axiosInstance.get(url, {
+        params: { interval: apiInterval, start: startTime, end: now },
+        timeout: 15000,
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.data || !response.data.success) {
+        throw new Error(`API response không hợp lệ cho ${symbol}: ${JSON.stringify(response.data)}`);
+      }
+      if (!response.data.data || typeof response.data.data !== 'object') {
+        throw new Error(`Dữ liệu kline từ API không hợp lệ cho ${symbol}: ${JSON.stringify(response.data.data)}`);
+      }
+      if (!Array.isArray(response.data.data.close) || response.data.data.close.length === 0) {
+        throw new Error(`Không có dữ liệu close price cho ${symbol}`);
+      }
+      return response.data.data;
+    };
+    return await getCachedKlineData({ symbol, timeframe: interval, limit, ...options, fetchRemote });
   } catch (error) {
     if (error.response) {
       const errorData = error.response.data || {};
@@ -206,4 +188,3 @@ export async function fetchFundingRateHistory(symbol) {
     return [];
   }
 }
-
