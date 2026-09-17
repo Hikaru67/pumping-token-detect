@@ -114,6 +114,9 @@ function formatAlertMessage(top10, alertReason = '', confluenceInfo = null) {
         });
 
         message += `📊 RSI: ${rsiStrings.join(' • ')}\n`;
+        if (token.rsiLive) {
+          message += '📡 RSI LIVE (giá ticker, nến cuối chưa đóng) - chờ nến đóng để xác nhận\n';
+        }
       } else {
         // Nếu không có RSI data, thông báo
         message += `📊 RSI: ⚠️ Không có dữ liệu\n`;
@@ -246,6 +249,9 @@ function formatDropAlertMessage(top10, alertReason = '', confluenceInfo = null) 
         });
 
         message += `📊 RSI: ${rsiStrings.join(' • ')}\n`;
+        if (token.rsiLive) {
+          message += '📡 RSI LIVE (giá ticker, nến cuối chưa đóng) - chờ nến đóng để xác nhận\n';
+        }
 
         // Hiển thị confluence nếu có (nổi bật hơn)
         const confluenceLine = wrappedToken.formatConfluenceDisplay();
@@ -420,6 +426,9 @@ function formatSingleSignalMessage(token, signalTimeframes, reason = '', hasSupe
       });
 
       message += `📊 RSI: ${rsiStrings.join(' • ')}\n`;
+      if (token.rsiLive) {
+        message += '📡 RSI LIVE (giá ticker, nến cuối chưa đóng) - chờ nến đóng để xác nhận\n';
+      }
 
       // Hiển thị confluence nếu có
       const confluenceLine = wrappedToken.formatConfluenceDisplay();

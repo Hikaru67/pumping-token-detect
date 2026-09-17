@@ -6,6 +6,9 @@ export const config = {
   // MEXC API
   mexcApiUrl: process.env.MEXC_API_URL || 'https://futures.mexc.co/api/v1/contract/ticker',
   mexcKlineApiBaseUrl: process.env.MEXC_KLINE_API_BASE_URL || 'https://contract.mexc.co/api/v1/contract/kline',
+  klineCacheEnabled: process.env.KLINE_CACHE_ENABLED !== 'false',
+  klineCacheWriteDebounceMs: parseInt(process.env.KLINE_CACHE_WRITE_DEBOUNCE_MS || '750', 10),
+  klineCacheStaleOnRateLimit: process.env.KLINE_CACHE_STALE_ON_RATE_LIMIT !== 'false',
 
   // Binance API (public futures)
   binanceApiBaseUrl: process.env.BINANCE_API_BASE_URL || 'https://fapi.binance.com',
