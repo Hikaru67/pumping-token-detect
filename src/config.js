@@ -77,11 +77,11 @@ export const config = {
   logLevel: process.env.LOG_LEVEL || 'info',
 
   // RSI Configuration
-  // Các khung thời gian để tính RSI (ví dụ: '1m', '5m', '15m', '1h', '4h', '1d')
-  // MEXC hỗ trợ: Min1, Min5, Min15, Min30, Hour1, Hour4, Day1, Week1, Month1
+  // Các khung thời gian để tính RSI; Day3 được tổng hợp từ nến Day1.
+  // MEXC Futures hỗ trợ Week1 nhưng không cung cấp Day3 trực tiếp.
   rsiTimeframes: process.env.RSI_TIMEFRAMES
     ? process.env.RSI_TIMEFRAMES.split(',').map(tf => tf.trim())
-    : ['Min15', 'Min30', 'Hour1', 'Hour4'], // Mặc định: 15m, 30m, 1h, 4h
+    : ['Min15', 'Min30', 'Hour1', 'Hour4', 'Day3', 'Week1'],
 
   // RSI Period (số chu kỳ để tính RSI, mặc định là 14)
   rsiPeriod: parseInt(process.env.RSI_PERIOD || '14', 10),

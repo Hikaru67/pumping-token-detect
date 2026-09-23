@@ -1,6 +1,6 @@
 import { config } from '../config.js';
 
-const LARGE_TIMEFRAMES = ['Day1', 'Week1', 'Hour8', 'Hour4'];
+const LARGE_TIMEFRAMES = ['Day1', 'Day3', 'Week1', 'Hour8', 'Hour4'];
 const MEDIUM_TIMEFRAMES = ['Hour1', 'Min60', 'Min30'];
 const SMALL_TIMEFRAMES = ['Min15', 'Min5', 'Min1'];
 
@@ -173,4 +173,3 @@ export function calculateSingleSignalScore({
     },
   };
 }
-

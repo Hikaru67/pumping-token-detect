@@ -1,7 +1,69 @@
 import { fetchKlineData } from '../api/apiClient.js';
-import { calculateRSI, checkRSIConfluence, formatTimeframe, getRSIStatus } from '../indicators/rsiCalculator.js';
+import { calculateRSI, checkRSIConfluence, getRSIStatus } from '../indicators/rsiCalculator.js';
+import { aggregateDailyKlinesTo3D, buildWeeklyRsiCloses } from '../indicators/timeframeAggregator.js';
 import { config } from '../config.js';
 import { getBaseSymbol } from './symbolUtils.js';
+
+const MAX_MEXC_KLINE_LIMIT = 2000;
+
+function getThreeDayCloseSeries(klineData, livePrice, nowMs) {
+  const aggregated = aggregateDailyKlinesTo3D(klineData, { nowMs, livePrice });
+  return aggregated.candles
+    .map(candle => Number(candle.close))
+    .filter(close => Number.isFinite(close) && close > 0);
+}
+
+function hasMoreDailyHistory(previousKlines, nextKlines) {
+  const previousTimes = Array.isArray(previousKlines?.time) ? previousKlines.time : [];
+  const nextTimes = Array.isArray(nextKlines?.time) ? nextKlines.time : [];
+  if (nextTimes.length > previousTimes.length) return true;
+  if (previousTimes.length === 0 || nextTimes.length === 0) return false;
+  return Number(nextTimes[0]) < Number(previousTimes[0]);
+}
+
+async function calculateThreeDayRSI(symbol, livePrice) {
+  const requiredCandles = config.rsiPeriod + 1;
+  let dailyLimit = Math.min(3 * requiredCandles, MAX_MEXC_KLINE_LIMIT);
+  let dailyKlines = await fetchKlineData(symbol, 'Day1', dailyLimit, {
+    includeLiveCandle: false,
+  });
+  let closes = getThreeDayCloseSeries(dailyKlines, livePrice, Date.now());
+
+  while (closes.length < requiredCandles && dailyLimit < MAX_MEXC_KLINE_LIMIT) {
+    const missingCandles = requiredCandles - closes.length;
+    const nextDailyLimit = Math.min(
+      MAX_MEXC_KLINE_LIMIT,
+      dailyLimit + Math.max(3, missingCandles * 3),
+    );
+    if (nextDailyLimit <= dailyLimit) break;
+
+    const nextDailyKlines = await fetchKlineData(symbol, 'Day1', nextDailyLimit, {
+      includeLiveCandle: false,
+    });
+    const hasMoreHistory = hasMoreDailyHistory(dailyKlines, nextDailyKlines);
+    dailyLimit = nextDailyLimit;
+    dailyKlines = nextDailyKlines;
+    closes = getThreeDayCloseSeries(dailyKlines, livePrice, Date.now());
+    if (!hasMoreHistory) break;
+  }
+
+  if (closes.length < requiredCandles) {
+    return {
+      timeframe: 'Day3',
+      rsi: null,
+      error: `Không đủ dữ liệu RSI 3D sau khi gom từ Day1 (${closes.length} < ${requiredCandles} nến)`,
+      shouldSkipLarger: true,
+    };
+  }
+
+  const rsi = calculateRSI(closes, config.rsiPeriod);
+  return {
+    timeframe: 'Day3',
+    rsi,
+    error: rsi === null ? 'RSI 3D không đủ dữ liệu để tính' : null,
+    shouldSkipLarger: false,
+  };
+}
 
 /**
  * Parse và format fundingRate từ token
@@ -38,10 +100,14 @@ function delay(ms) {
  */
 async function calculateRSIForTimeframe(symbol, timeframe, timeframeOrder, livePrice) {
   try {
+    if (timeframe === 'Day3') {
+      return await calculateThreeDayRSI(symbol, livePrice);
+    }
+
     // Lấy kline data từ API
     const klineData = await fetchKlineData(symbol, timeframe, config.rsiPeriod + 50, {
-      livePrice,
-      includeLiveCandle: true,
+      ...(timeframe === 'Week1' ? {} : { livePrice }),
+      includeLiveCandle: timeframe !== 'Week1',
     });
     
     if (!klineData || !Array.isArray(klineData.close) || klineData.close.length === 0) {
@@ -55,9 +121,11 @@ async function calculateRSIForTimeframe(symbol, timeframe, timeframeOrder, liveP
     }
 
     // Trích xuất giá đóng cửa (close price)
-    const closes = (klineData.realClose || klineData.close || [])
-      .map(close => parseFloat(close))
-      .filter(val => !isNaN(val) && val > 0);
+    const closes = timeframe === 'Week1'
+      ? buildWeeklyRsiCloses(klineData, { livePrice })
+      : (klineData.realClose || klineData.close || [])
+        .map(close => parseFloat(close))
+        .filter(val => !isNaN(val) && val > 0);
     
     if (closes.length < config.rsiPeriod + 1) {
       console.warn(`⚠️  Không đủ dữ liệu close price để tính RSI cho ${symbol} (${timeframe}): chỉ có ${closes.length} candles, cần ít nhất ${config.rsiPeriod + 1}`);
@@ -98,6 +166,14 @@ async function calculateRSIForTimeframe(symbol, timeframe, timeframeOrder, liveP
   }
 }
 
+export function shouldSkipLargerTimeframe(sourceTimeframe, candidateTimeframe, timeframeOrder) {
+  const sourceIndex = timeframeOrder.indexOf(sourceTimeframe);
+  const candidateIndex = timeframeOrder.indexOf(candidateTimeframe);
+  if (sourceIndex < 0 || candidateIndex <= sourceIndex) return false;
+  if (['Day1', 'Day3'].includes(sourceTimeframe) && candidateTimeframe === 'Week1') return false;
+  return true;
+}
+
 /**
  * Xử lý batch timeframes với giới hạn concurrent
  * @param {Array<string>} timeframes - Danh sách timeframes cần tính
@@ -107,11 +183,14 @@ async function calculateRSIForTimeframe(symbol, timeframe, timeframeOrder, liveP
  * @returns {Promise<Array>} Kết quả tính RSI cho từng timeframe
  */
 async function processTimeframesBatch(timeframes, symbol, timeframeOrder, maxConcurrent, livePrice) {
-  const results = [];
+  const resultsByTimeframe = new Map();
+  const skippedByTimeframe = new Map();
   
   // Xử lý từng batch
   for (let i = 0; i < timeframes.length; i += maxConcurrent) {
-    const batch = timeframes.slice(i, i + maxConcurrent);
+    const batch = timeframes.slice(i, i + maxConcurrent)
+      .filter(timeframe => !skippedByTimeframe.has(timeframe));
+    if (batch.length === 0) continue;
     
     // Tính song song trong batch
     const batchPromises = batch.map(tf => calculateRSIForTimeframe(symbol, tf, timeframeOrder, livePrice));
@@ -121,32 +200,22 @@ async function processTimeframesBatch(timeframes, symbol, timeframeOrder, maxCon
     for (let j = 0; j < batchResults.length; j++) {
       const result = batchResults[j];
       if (result.status === 'fulfilled') {
-        results.push(result.value);
+        resultsByTimeframe.set(batch[j], result.value);
         
-        // Nếu cần skip các timeframe lớn hơn, đánh dấu và dừng
+        // Đánh dấu các timeframe lớn hơn bị phụ thuộc vào lỗi dữ liệu hiện tại.
         if (result.value.shouldSkipLarger) {
-          const currentIndex = timeframeOrder.indexOf(batch[j]);
-          if (currentIndex !== -1) {
-            const remainingTimeframes = timeframes.slice(i + j + 1);
-            if (remainingTimeframes.length > 0) {
-              console.warn(`   ⏭️  Bỏ qua các timeframe lớn hơn: ${remainingTimeframes.map(tf => formatTimeframe(tf)).join(', ')}`);
-              // Thêm null cho các timeframe bị skip
-              remainingTimeframes.forEach(tf => {
-                results.push({
-                  timeframe: tf,
-                  rsi: null,
-                  error: 'Skipped do lỗi ở timeframe nhỏ hơn',
-                  shouldSkipLarger: false,
-                });
-              });
-            }
+          const sourceTimeframe = batch[j];
+          const remainingTimeframes = timeframes.filter(timeframe =>
+            shouldSkipLargerTimeframe(sourceTimeframe, timeframe, timeframeOrder)
+            && !resultsByTimeframe.has(timeframe)
+          );
+          for (const timeframe of remainingTimeframes) {
+            skippedByTimeframe.set(timeframe, sourceTimeframe);
           }
-          // Trả về kết quả đã xử lý (bao gồm cả các timeframe bị skip)
-          return results;
         }
       } else {
         // Lỗi khi gọi function
-        results.push({
+        resultsByTimeframe.set(batch[j], {
           timeframe: batch[j],
           rsi: null,
           error: result.reason?.message || 'Unknown error',
@@ -155,8 +224,21 @@ async function processTimeframesBatch(timeframes, symbol, timeframeOrder, maxCon
       }
     }
   }
-  
-  return results;
+
+  return timeframes.map(timeframe => {
+    if (resultsByTimeframe.has(timeframe)) return resultsByTimeframe.get(timeframe);
+
+    const sourceTimeframe = skippedByTimeframe.get(timeframe);
+    const error = sourceTimeframe === 'Day1' && timeframe === 'Day3'
+      ? 'Skipped do thiếu nến nguồn Day1'
+      : 'Skipped do lỗi ở timeframe nhỏ hơn';
+    return {
+      timeframe,
+      rsi: null,
+      error,
+      shouldSkipLarger: false,
+    };
+  });
 }
 
 async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes, livePrice) {
@@ -164,7 +246,7 @@ async function calculateRSIForToken(symbol, timeframes = config.rsiTimeframes, l
   const errors = [];
 
   // Định nghĩa thứ tự timeframe (từ nhỏ đến lớn) để biết timeframe nào lớn hơn
-  const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Min60', 'Hour1', 'Hour4', 'Hour8', 'Day1', 'Week1', 'Month1'];
+  const timeframeOrder = ['Min1', 'Min5', 'Min15', 'Min30', 'Min60', 'Hour1', 'Hour4', 'Hour8', 'Day1', 'Day3', 'Week1', 'Month1'];
   
   // Sắp xếp timeframes theo thứ tự từ nhỏ đến lớn
   const sortedTimeframes = [...timeframes].sort((a, b) => {
