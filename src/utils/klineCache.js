@@ -35,6 +35,16 @@ function bucketFor(timeSeconds, timeframe) {
   return Math.floor(timeSeconds / intervalSeconds(timeframe));
 }
 
+function cacheBucketFor(timeSeconds, timeframe, entry) {
+  if (timeframe === 'Week1') {
+    const latestCandleTime = toSeconds(entry?.data?.time?.at(-1));
+    if (Number.isFinite(latestCandleTime)) {
+      return Math.floor((timeSeconds - latestCandleTime) / intervalSeconds(timeframe));
+    }
+  }
+  return bucketFor(timeSeconds, timeframe);
+}
+
 function cloneData(data) {
   return Object.fromEntries(Object.entries(data).map(([key, value]) => [
     key,
@@ -159,8 +169,8 @@ export async function getCachedKlineData({ symbol, timeframe, limit, fetchRemote
   const key = cacheKey(symbol, timeframe);
   const now = Math.floor(Date.now() / 1000);
   const requestedLimit = Math.max(1, Number(limit) || 200);
-  const currentBucket = bucketFor(now, timeframe);
   let entry = memoryCache.get(key);
+  const currentBucket = cacheBucketFor(now, timeframe, entry);
   const needsInitialFetch = !entry?.data;
   const needsRefresh = entry && entry.lastFetchedBucket !== currentBucket;
   // Nếu caller mới yêu cầu lịch sử dài hơn, chỉ mở rộng một lần; không lặp lại
@@ -177,15 +187,20 @@ export async function getCachedKlineData({ symbol, timeframe, limit, fetchRemote
       request = inFlightRequests.get(key);
     } else {
       request = fetchRemote(requestLimit).then(remoteData => {
-        const normalized = normalizeData(remoteData);
-        if (!normalized) throw new Error(`Dữ liệu Kline không hợp lệ cho ${symbol}`);
-        const retainedLimit = Math.max(requestedLimit, entry?.requestedLimit || 0);
-        entry = {
-          data: mergeData(entry?.data, normalized, retainedLimit),
-          requestedLimit: retainedLimit,
-          lastFetchedAt: Date.now(),
-          lastFetchedBucket: currentBucket,
-        };
+      const normalized = normalizeData(remoteData);
+      if (!normalized) throw new Error(`Dữ liệu Kline không hợp lệ cho ${symbol}`);
+      const retainedLimit = Math.max(requestedLimit, entry?.requestedLimit || 0);
+      const mergedData = mergeData(entry?.data, normalized, retainedLimit);
+      const fetchedAt = Date.now();
+      const fetchedBucket = timeframe === 'Week1'
+        ? cacheBucketFor(Math.floor(fetchedAt / 1000), timeframe, { data: mergedData })
+        : currentBucket;
+      entry = {
+        data: mergedData,
+        requestedLimit: retainedLimit,
+        lastFetchedAt: fetchedAt,
+        lastFetchedBucket: fetchedBucket,
+      };
         memoryCache.set(key, entry);
         scheduleWrite();
         return entry.data;

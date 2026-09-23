@@ -27,3 +27,4 @@ Thumbs.db
 # Tests outputs (manual or temporary)
 docs
 tests
+/plans/

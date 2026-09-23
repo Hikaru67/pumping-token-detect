@@ -179,10 +179,10 @@ export function formatTimeframe(timeframe) {
     'Hour4': '4h',
     'Hour8': '8h',
     'Day1': '1d',
-    'Week1': '1w',
+    'Day3': '3D',
+    'Week1': '1W',
     'Month1': '1M',
   };
   
   return mapping[timeframe] || timeframe;
 }
-
