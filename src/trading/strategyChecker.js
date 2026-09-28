@@ -344,13 +344,63 @@ export async function checkStrategy5(token) {
   };
 }
 
+
+/**
+ * Chiến thuật 6 (Blow-off Top / Macro Overheat):
+ * Khi đạt super overbought (>= 90) ở khung 1h, 4h, 8h, 1d
+ * Khung nhỏ (5m, 15m) đạt >= 90
+ * Vào lệnh 50% tài khoản
+ * @param {Object} token - Token object có RSI data
+ * @returns {Promise<Object>} { matched: boolean, reason: string }
+ */
+export async function checkStrategy6(token) {
+  if (!token || !token.rsi || typeof token.rsi !== 'object') {
+    return { matched: false, reason: 'Token không có RSI data' };
+  }
+
+  const rsiData = token.rsi;
+
+  // Kiểm tra super overbought >= 90 ở khung lớn: 1h, 4h, 8h, 1d
+  const macroTimeframes = ['Min5', 'Min15', 'Min30', 'Hour1', 'Hour4', 'Hour8', 'Day1', 'Day3', 'Week1'];
+  const superOverboughtMacro = macroTimeframes.filter(tf => isSuperOverbought(rsiData, tf));
+
+  if (superOverboughtMacro.length !== macroTimeframes.length) {
+    return {
+      matched: false,
+      reason: `Chưa đủ RSI >= 90 ở các khung lớn (1h, 4h, 8h, 1d): ${superOverboughtMacro.length}/${macroTimeframes.length}`,
+    };
+  }
+
+  return {
+    matched: true,
+    reason: `Chiến thuật 6 (m5 -> w1) đạt 90`,
+  };
+}
+
 /**
  * Kiểm tra tất cả các chiến thuật và trả về chiến thuật phù hợp nhất
  * @param {Object} token - Token object có RSI data
  * @returns {Promise<Object>} { strategy: number|null, result: Object, volumePercent: number }
  */
-export async function checkAllStrategies(token) {
-  // Thứ tự: Strategy 5 > Strategy 4 > Strategy 2 > Strategy 1 > Strategy 3
+export async function checkAllStrategies(token, options = {}) {
+  const logSignal = options.logSignals === false
+    ? async () => { }
+    : appendSignalLog;
+
+  // Thứ tự: Strategy 6 > Strategy 5 > Strategy 4 > Strategy 2 > Strategy 1 > Strategy 3
+
+  // Check Strategy 6
+  const strategy6Result = await checkStrategy6(token);
+  if (strategy6Result.matched) {
+    await logSignal(
+      `[${token.symbol || 'UNKNOWN'}] Chiến thuật 6 THỎA MÃN: ${strategy6Result.reason}`
+    );
+    return {
+      strategy: 6,
+      result: strategy6Result,
+      volumePercent: config.tradingStrategy6VolumePercent || 50, // 50% tài khoản mặc định
+    };
+  }
 
   // Check Strategy 5
   const strategy5Result = await checkStrategy5(token);

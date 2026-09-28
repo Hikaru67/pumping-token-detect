@@ -150,6 +150,7 @@ export const config = {
   tradingStrategy3VolumePercent: parseFloat(process.env.TRADING_STRATEGY3_VOLUME_PERCENT || '1', 1), // 1% tài khoản
   tradingStrategy4VolumePercent: parseFloat(process.env.TRADING_STRATEGY4_VOLUME_PERCENT || '10', 10), // 10% tài khoản
   tradingStrategy5VolumePercent: parseFloat(process.env.TRADING_STRATEGY5_VOLUME_PERCENT || '15', 15), // 15% tài khoản
+  tradingStrategy6VolumePercent: parseFloat(process.env.TRADING_STRATEGY6_VOLUME_PERCENT || '50', 50), // 50% tài khoản
 
   // Take Profit Configuration
   tpEnabled: process.env.TP_ENABLED === 'true', // Bật/tắt take profit tự động
